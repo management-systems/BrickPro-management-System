@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Rewari@123
+      POSTGRES_DB: brickpro
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+
+  backend:
+    build: ./backend
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://postgres:Rewari@123@db:5432/brickpro
+      JWT_SECRET: brickpro-dev-secret-2024
+      JWT_REFRESH_SECRET: brickpro-refresh-secret-2024
+      PORT: 4000
+      NODE_ENV: production
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 465
+      SMTP_SECURE: true
+      SMTP_USER: admin@managementsystems.in
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: admin@managementsystems.in
+    depends_on:
+      - db
+    restart: always
+
+  web:
+    build: ./apps/web
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+
+  admin:
+    build: ./apps/admin
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  pgdata:

@@ -1,0 +1,36 @@
+const t: Record<string, Record<string, string>> = {
+  home: { en: 'Home', hi: 'होम' },
+  production: { en: 'Production', hi: 'उत्पादन' },
+  dispatch: { en: 'Sell Bricks', hi: 'ईंट बेचें' },
+  customers: { en: 'Customers', hi: 'ग्राहक' },
+  rawMaterials: { en: 'Raw Materials', hi: 'कच्चा माल' },
+  labour: { en: 'Labour', hi: 'मजदूर' },
+  expenditure: { en: 'Expenditure', hi: 'खर्चे' },
+  fuel: { en: 'Fuel', hi: 'ईंधन' },
+  reports: { en: 'Reports', hi: 'रिपोर्ट' },
+  users: { en: 'Users', hi: 'उपयोगकर्ता' },
+  more: { en: 'More', hi: 'अधिक' },
+  todayProduction: { en: "Today's Production", hi: 'आज का उत्पादन' },
+  monthRevenue: { en: 'Month Revenue', hi: 'महीने की आय' },
+  outstanding: { en: 'Outstanding', hi: 'बकाया' },
+  totalLabour: { en: 'Total Labour', hi: 'कुल मजदूर' },
+  addEntry: { en: 'Add Entry', hi: 'एंट्री जोड़ें' },
+  login: { en: 'Login', hi: 'लॉगिन' },
+  signup: { en: 'Start Free Trial', hi: 'मुफ्त ट्रायल शुरू करें' },
+  name: { en: 'Name', hi: 'नाम' },
+  mobile: { en: 'Mobile', hi: 'मोबाइल' },
+  email: { en: 'Email', hi: 'ईमेल' },
+  password: { en: 'Password', hi: 'पासवर्ड' },
+  factoryName: { en: 'Factory Name', hi: 'कारखाने का नाम' },
+  sendOtp: { en: 'Send OTP', hi: 'OTP भेजें' },
+  verify: { en: 'Verify', hi: 'सत्यापित करें' },
+  save: { en: 'Save', hi: 'सेव करें' },
+  stock: { en: 'Stock', hi: 'स्टॉक' },
+  fuel_label: { en: 'Fuel', hi: 'ईंधन' },
+  logout: { en: 'Logout', hi: 'लॉगआउट' },
+  settings: { en: 'Settings', hi: 'सेटिंग्स' },
+};
+
+export function tr(key: string, lang: 'en' | 'hi'): string {
+  return t[key]?.[lang] || key;
+}

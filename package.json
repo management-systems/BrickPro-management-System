@@ -1,0 +1,9 @@
+{
+  "name": "brickpro",
+  "private": true,
+  "scripts": {
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:admin": "cd apps/admin && npm run dev",
+    "dev:backend": "cd backend && npm run dev"
+  }
+}

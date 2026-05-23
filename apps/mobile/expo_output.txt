@@ -1,0 +1,5 @@
+Starting project at E:\Extra\Company\websites\Bricks_Management_Systems\BrickPro\apps\mobile
+› Port 8081 is being used by another process
+› Skipping dev server
+
+E:\Extra\Company\websites\Bricks_Management_Systems\BrickPro\apps\mobile>

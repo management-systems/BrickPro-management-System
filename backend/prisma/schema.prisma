@@ -1,0 +1,512 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  SUPERVISOR
+  OPERATOR
+  ACCOUNTANT
+  WORKER
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PAID
+  CREDIT
+  PARTIAL
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF
+}
+
+enum LabourType {
+  PERMANENT
+  DAILY
+  PER_BRICK
+}
+
+enum Shift {
+  MORNING
+  EVENING
+  NIGHT
+  WHOLE_DAY
+}
+
+model SuperAdmin {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  name      String
+  createdAt DateTime   @default(now())
+  logs      AdminLog[]
+}
+
+model AdminLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     SuperAdmin @relation(fields: [adminId], references: [id])
+  action    String
+  target    String?
+  targetId  String?
+  details   String?
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  clientId  String?
+  userId    String?
+  userName  String?
+  action    String
+  module    String?
+  target    String?
+  targetId  String?
+  details   String?
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  amount    Float
+  month     String
+  year      Int
+  status    String   @default("pending") // pending, collected
+  collectedAt DateTime?
+  remarks   String?
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id                 String             @id @default(uuid())
+  name               String
+  mobile             String             @unique
+  email              String?
+  plan               String             @default("trial")
+  trialEndsAt        DateTime
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  users              User[]
+  factories          Factory[]
+  brickTypes         BrickType[]
+  customers          Customer[]
+  rawMaterials       RawMaterial[]
+  suppliers          Supplier[]
+  payments           Payment[]
+  invoiceSettings    InvoiceSettings?
+}
+
+model User {
+  id        String        @id @default(uuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id])
+  name      String
+  mobile    String?       @unique
+  email     String?       @unique
+  password      String?
+  plainPassword String?
+  pin           String?
+  role          Role          @default(OPERATOR)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  factories UserFactory[]
+}
+
+model UserFactory {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  factoryId  String
+  factory    Factory  @relation(fields: [factoryId], references: [id])
+  role       Role     @default(OPERATOR)
+  permissions String[] @default([])
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, factoryId])
+}
+
+model Factory {
+  id             String               @id @default(uuid())
+  clientId       String
+  client         Client               @relation(fields: [clientId], references: [id])
+  name           String
+  location       String?
+  capacityPerDay Int?
+  active         Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  productions    ProductionEntry[]
+  dispatches     Dispatch[]
+  fuelEntries    FuelEntry[]
+  labourList     Labour[]
+  rawPurchases   RawMaterialPurchase[]
+  consumptions   RawMaterialConsumption[]
+  users          UserFactory[]
+  expenditures   Expenditure[]
+  invoices       Invoice[]
+}
+
+model BrickType {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  name      String
+  nameHindi String?
+  hsnCode   String   @default("6901")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model ProductionEntry {
+  id         String   @id @default(uuid())
+  factoryId  String
+  factory    Factory  @relation(fields: [factoryId], references: [id])
+  date       DateTime
+  brickType  String
+  shift      Shift    @default(MORNING)
+  rawCount   Int
+  firedCount Int
+  scrapCount Int      @default(0)
+  remarks    String?
+  fileUrl    String?
+  enteredBy  String
+  createdAt  DateTime @default(now())
+}
+
+model Customer {
+  id          String     @id @default(uuid())
+  clientId    String
+  client      Client     @relation(fields: [clientId], references: [id])
+  name        String
+  firm        String?
+  mobile      String
+  address     String?
+  gstin       String?
+  creditLimit Float?     @default(0)
+  type        String     @default("dealer")
+  createdAt   DateTime   @default(now())
+  dispatches  Dispatch[]
+  invoices    Invoice[]
+  invoiceSettings CustomerInvoiceSettings?
+}
+
+model Dispatch {
+  id             String        @id @default(uuid())
+  factoryId      String
+  factory        Factory       @relation(fields: [factoryId], references: [id])
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  date           DateTime
+  truckNo        String
+  driverName     String?
+  driverMobile   String?
+  brickType      String
+  quantity       Int
+  rate           Float
+  amount         Float
+  challanNo      String        @unique
+  paymentStatus  PaymentStatus @default(CREDIT)
+  amountReceived Float         @default(0)
+  balanceDue     Float         @default(0)
+  fileUrl        String?
+  remarks        String?
+  enteredBy      String
+  createdAt      DateTime      @default(now())
+  invoiceItems   InvoiceItem[]
+}
+
+model FuelEntry {
+  id        String   @id @default(uuid())
+  factoryId String
+  factory   Factory  @relation(fields: [factoryId], references: [id])
+  date      DateTime
+  fuelType  String
+  quantity  Float
+  unit      String
+  rate      Float
+  supplier  String?
+  totalCost Float
+  invoiceNo String?
+  fileUrl   String?
+  enteredBy String
+  createdAt DateTime @default(now())
+}
+
+model Labour {
+  id            String       @id @default(uuid())
+  factoryId     String
+  factory       Factory      @relation(fields: [factoryId], references: [id])
+  name          String
+  mobile        String?
+  type          LabourType
+  dailyRate     Float?
+  monthlySalary Float?
+  perBrickRate  Float?
+  aadhaar       String?
+  joiningDate   DateTime?
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  attendance    Attendance[]
+  payments      LabourPayment[]
+  productions   LabourProduction[]
+}
+
+model LabourProduction {
+  id         String   @id @default(uuid())
+  labourId   String
+  labour     Labour   @relation(fields: [labourId], references: [id])
+  date       DateTime
+  brickType  String
+  quantity   Int
+  rate       Float
+  amount     Float
+  enteredBy  String
+  createdAt  DateTime @default(now())
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  labourId  String
+  labour    Labour           @relation(fields: [labourId], references: [id])
+  date      DateTime
+  status    AttendanceStatus
+  workType  String?
+  enteredBy String
+  createdAt DateTime         @default(now())
+
+  @@unique([labourId, date])
+}
+
+model LabourPayment {
+  id        String   @id @default(uuid())
+  labourId  String
+  labour    Labour   @relation(fields: [labourId], references: [id])
+  amount    Float
+  date      DateTime
+  mode      String   @default("cash")
+  remarks   String?
+  createdAt DateTime @default(now())
+}
+
+model RawMaterial {
+  id                   String                   @id @default(uuid())
+  clientId             String
+  client               Client                   @relation(fields: [clientId], references: [id])
+  name                 String
+  nameHindi            String?
+  unit                 String
+  hsnCode              String?
+  lowStockThreshold    Float?
+  consumptionPer1000   Float?
+  active               Boolean                  @default(true)
+  createdAt            DateTime                 @default(now())
+  purchases            RawMaterialPurchase[]
+  consumptions         RawMaterialConsumption[]
+  priceHistory         RawMaterialPriceHistory[]
+}
+
+model Supplier {
+  id        String                @id @default(uuid())
+  clientId  String
+  client    Client                @relation(fields: [clientId], references: [id])
+  name      String
+  firm      String?
+  mobile    String?
+  address   String?
+  gstin     String?
+  createdAt DateTime              @default(now())
+  purchases RawMaterialPurchase[]
+}
+
+model RawMaterialPurchase {
+  id            String        @id @default(uuid())
+  factoryId     String
+  factory       Factory       @relation(fields: [factoryId], references: [id])
+  materialId    String
+  material      RawMaterial   @relation(fields: [materialId], references: [id])
+  supplierId    String
+  supplier      Supplier      @relation(fields: [supplierId], references: [id])
+  date          DateTime
+  quantity      Float
+  rate          Float
+  totalCost     Float
+  invoiceNo     String?
+  paymentStatus PaymentStatus @default(CREDIT)
+  paymentTerms  String?       // advance, current, after, partial
+  amountPaid    Float         @default(0)
+  balanceDue    Float         @default(0)
+  fileUrl       String?
+  enteredBy     String
+  createdAt     DateTime      @default(now())
+}
+
+model RawMaterialPriceHistory {
+  id            String      @id @default(uuid())
+  materialId    String
+  material      RawMaterial @relation(fields: [materialId], references: [id])
+  oldRate       Float
+  newRate       Float
+  effectiveFrom DateTime
+  changedBy     String
+  createdAt     DateTime    @default(now())
+}
+
+model RawMaterialConsumption {
+  id         String      @id @default(uuid())
+  factoryId  String
+  factory    Factory     @relation(fields: [factoryId], references: [id])
+  materialId String
+  material   RawMaterial @relation(fields: [materialId], references: [id])
+  date       DateTime
+  quantity   Float
+  enteredBy  String
+  createdAt  DateTime    @default(now())
+}
+
+model Expenditure {
+  id         String   @id @default(uuid())
+  factoryId  String
+  factory    Factory  @relation(fields: [factoryId], references: [id])
+  date       DateTime
+  category   String
+  amount     Float
+  description String?
+  paymentMode String  @default("cash")
+  paidTo     String?
+  enteredBy  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime?
+}
+
+model EditLog {
+  id         String   @id @default(uuid())
+  clientId   String
+  userId     String
+  userName   String
+  userRole   String
+  module     String   // production, dispatch, expenditure, fuel, labour
+  recordId   String
+  field      String
+  oldValue   String?
+  newValue   String?
+  reason     String
+  createdAt  DateTime @default(now())
+}
+
+model InvoiceSettings {
+  id              String   @id @default(uuid())
+  clientId        String   @unique
+  client          Client   @relation(fields: [clientId], references: [id])
+  companyName     String
+  companyAddress  String
+  companyGstin    String?
+  companyMobile   String?
+  companyEmail    String?
+  logoUrl         String?
+  layout          String   @default("modern") // modern, classic, minimal
+  showGst         Boolean  @default(true)
+  gstRate         Float    @default(18.0)
+  gstType         String   @default("SGST_CGST") // SGST_CGST or IGST
+  sgstRate        Float    @default(9.0)
+  cgstRate        Float    @default(9.0)
+  igstRate        Float    @default(18.0)
+  showHsn         Boolean  @default(true)
+  showTerms       Boolean  @default(true)
+  termsText       String?
+  bankName        String?
+  accountNumber   String?
+  ifscCode        String?
+  upiId           String?
+  signatoryName   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CustomerInvoiceSettings {
+  id              String   @id @default(uuid())
+  customerId      String   @unique
+  customer        Customer @relation(fields: [customerId], references: [id])
+  invoiceName     String?
+  invoiceAddress  String?
+  preferredLayout String?  // override default layout
+  specialRate     Float?   // customer-specific rate
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  clientId        String
+  factoryId       String
+  factory         Factory       @relation(fields: [factoryId], references: [id])
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  invoiceNumber   String        @unique
+  invoiceDate     DateTime
+  dueDate         DateTime?
+  billingName     String?       // M/s name on bill (can differ from customer name)
+  vehicleNo       String?
+  dateFrom        DateTime?     // dispatches from date
+  dateTo          DateTime?     // dispatches to date
+  subtotal        Float
+  sgstAmount      Float         @default(0)
+  cgstAmount      Float         @default(0)
+  igstAmount      Float         @default(0)
+  gstAmount       Float         @default(0)
+  totalAmount     Float
+  amountInWords   String?
+  status          String        @default("draft") // draft, sent, paid, cancelled
+  notes           String?
+  createdBy       String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  items           InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  dispatchId  String?
+  dispatch    Dispatch? @relation(fields: [dispatchId], references: [id])
+  description String
+  brickType   String
+  quantity    Int
+  rate        Float
+  amount      Float
+  hsnCode     String   @default("6901")
+  createdAt   DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  clientId  String?  // null = broadcast to all
+  title     String
+  message   String
+  type      String   @default("info") // info, warning, promo, update
+  read      Boolean  @default(false)
+  createdBy String?  // admin who sent it
+  createdAt DateTime @default(now())
+}
