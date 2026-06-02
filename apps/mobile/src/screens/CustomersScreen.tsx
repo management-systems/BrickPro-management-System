@@ -5,7 +5,7 @@ import { getColors, spacing } from '../lib/theme';
 import api from '../lib/api';
 
 export default function CustomersScreen({ navigation }: any) {
-  const { theme } = useAppStore();
+  const { theme, activeFactory } = useAppStore();
   const colors = getColors(theme);
   const [customers, setCustomers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -14,8 +14,8 @@ export default function CustomersScreen({ navigation }: any) {
   const [details, setDetails] = useState<any>(null);
   const [form, setForm] = useState({ name: '', mobile: '', firm: '', address: '', ratePer1000: '' });
 
-  useEffect(() => { load(); }, []);
-  const load = () => api.get('/customers').then(r => setCustomers(r.data)).catch(() => {});
+  useEffect(() => { load(); }, [activeFactory]);
+  const load = () => api.get('/customers', { params: { factoryId: activeFactory } }).then(r => setCustomers(r.data)).catch(() => {});
 
   const submit = async () => {
     if (!form.name || !form.mobile) { Alert.alert('Name and mobile required'); return; }
@@ -27,7 +27,7 @@ export default function CustomersScreen({ navigation }: any) {
   };
 
   const openDetail = async (c: any) => {
-    try { const { data } = await api.get(`/customers/${c.id}/details`); setSelected(c); setDetails(data); }
+    try { const { data } = await api.get(`/customers/${c.id}/details`, { params: { factoryId: activeFactory } }); setSelected(c); setDetails(data); }
     catch { setSelected(c); setDetails({ dispatches: [], totalSold: 0, totalAmount: 0, totalReceived: 0, totalDue: 0 }); }
   };
 

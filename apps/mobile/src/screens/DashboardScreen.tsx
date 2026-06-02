@@ -7,21 +7,24 @@ import { getColors, spacing } from '../lib/theme';
 import api from '../lib/api';
 
 export default function DashboardScreen({ navigation }: any) {
-  const { lang, theme, toggleLang, toggleTheme } = useAppStore();
+  const { lang, theme, toggleLang, toggleTheme, activeFactory } = useAppStore();
   const colors = getColors(theme);
   const user = useAuthStore((s) => s.user);
   const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [stock, setStock] = useState<Record<string, { produced: number; sold: number; stock: number }>>({});
 
   const load = async () => {
-    try { const { data: d } = await api.get('/reports/dashboard'); setData(d); }
+    try { const { data: d } = await api.get('/reports/dashboard', { params: { factoryId: activeFactory } }); setData(d); }
     catch { setData({ todayProduction: 0, monthRevenue: 0, totalOutstanding: 0, totalLabour: 0, monthExpenses: 0 }); }
     try { const { data: n } = await api.get('/reports/notifications'); setUnreadCount(n.filter((x: any) => !x.read).length); }
     catch {}
+    try { const { data: s } = await api.get('/reports/stock', { params: { factoryId: activeFactory } }); setStock(s); }
+    catch {}
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [activeFactory]);
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const stats = [
@@ -75,6 +78,22 @@ export default function DashboardScreen({ navigation }: any) {
       </View>
 
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{lang === 'en' ? 'Quick Actions' : 'त्वरित कार्य'}</Text>
+
+      {/* Brick Stock Card */}
+      {Object.keys(stock).length > 0 && (
+        <View style={{ marginHorizontal: spacing.lg, marginBottom: 16 }}>
+          <View style={[styles.statCard, { width: '100%', borderLeftColor: colors.primary, backgroundColor: colors.surface }]}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 10 }}>🧱 Brick Stock (In Hand)</Text>
+            {Object.entries(stock).map(([type, val]) => (
+              <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                <Text style={{ fontSize: 13, color: colors.textLight }}>{type}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: val.stock > 0 ? colors.success : colors.danger }}>{val.stock.toLocaleString()}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       <View style={styles.actionGrid}>
         {actions.map(a => (
           <TouchableOpacity key={a.screen} style={[styles.actionCard, { backgroundColor: theme === 'dark' ? colors.surface : a.bg }]} onPress={() => navigation.navigate(a.screen)}>

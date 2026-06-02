@@ -16,6 +16,7 @@ export default function Production() {
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [filterType, setFilterType] = useState('');
   const [search, setSearch] = useState('');
+  const [stock, setStock] = useState<Record<string, { produced: number; sold: number; stock: number }>>({});
 
   const [form, setForm] = useState({
     brickType: localStorage.getItem('last_brickType') || 'Fly Ash Brick',
@@ -30,6 +31,7 @@ export default function Production() {
       .then((r) => setEntries(r.data));
   };
   useEffect(() => { load(); }, [activeFactory, filterMonth, filterYear]);
+  useEffect(() => { api.get('/reports/stock', { params: { factoryId: activeFactory } }).then(r => setStock(r.data)).catch(() => {}); }, [activeFactory]);
 
   const submit = async () => {
     if (!form.count) return toast.error('Enter count');
@@ -103,6 +105,22 @@ export default function Production() {
           </div>
         ))}
       </div>
+
+      {/* Brick Stock Card */}
+      {Object.keys(stock).length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>🧱 Brick Stock (Production - Sold = In Hand)</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {Object.entries(stock).map(([type, val]) => (
+              <div key={type} style={{ padding: 12, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 4 }}>{type}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: val.stock > 0 ? 'var(--success)' : 'var(--danger)' }}>{val.stock.toLocaleString()}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>P:{val.produced.toLocaleString()} | S:{val.sold.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add Form */}
       {showForm && (

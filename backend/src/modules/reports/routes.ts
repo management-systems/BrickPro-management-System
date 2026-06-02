@@ -5,9 +5,35 @@ import { authenticate, AuthRequest } from '../../common/middleware';
 const router = Router();
 router.use(authenticate);
 
-router.get('/dashboard', async (req: AuthRequest, res: Response) => {
+// GET /api/reports/stock — Brick stock per type (production - dispatched)
+router.get('/stock', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
   const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
-  const fIds = factories.map(f => f.id);
+  const fIds = factoryId ? [factoryId as string] : factories.map(f => f.id);
+
+  const [productions, dispatches] = await Promise.all([
+    prisma.productionEntry.findMany({ where: { factoryId: { in: fIds } }, select: { brickType: true, firedCount: true } }),
+    prisma.dispatch.findMany({ where: { factoryId: { in: fIds } }, select: { brickType: true, quantity: true } }),
+  ]);
+
+  const stock: Record<string, { produced: number; sold: number; stock: number }> = {};
+  productions.forEach(p => {
+    if (!stock[p.brickType]) stock[p.brickType] = { produced: 0, sold: 0, stock: 0 };
+    stock[p.brickType].produced += p.firedCount;
+  });
+  dispatches.forEach(d => {
+    if (!stock[d.brickType]) stock[d.brickType] = { produced: 0, sold: 0, stock: 0 };
+    stock[d.brickType].sold += d.quantity;
+  });
+  Object.keys(stock).forEach(k => { stock[k].stock = stock[k].produced - stock[k].sold; });
+
+  res.json(stock);
+});
+
+router.get('/dashboard', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
+  const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
+  const fIds = factoryId ? [factoryId as string] : factories.map(f => f.id);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -33,8 +59,9 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
 
 // GET /api/reports/calendar?date=2026-05-15 OR ?from=2026-05-10&to=2026-05-20
 router.get('/calendar', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
   const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
-  const fIds = factories.map(f => f.id);
+  const fIds = factoryId ? [factoryId as string] : factories.map(f => f.id);
   const { date, from, to, month, year } = req.query;
 
   // Single date
@@ -150,8 +177,9 @@ router.patch('/notifications/:id/read', async (req: AuthRequest, res: Response) 
 
 // GET /api/reports/charts — User's own charts data (last 12 months)
 router.get('/charts', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
   const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
-  const fIds = factories.map(f => f.id);
+  const fIds = factoryId ? [factoryId as string] : factories.map(f => f.id);
   const now = new Date();
 
   // Last 12 months

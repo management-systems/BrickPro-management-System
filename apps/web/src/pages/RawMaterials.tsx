@@ -31,7 +31,7 @@ export default function RawMaterials() {
     api.get('/raw-materials/materials').then((r) => setMaterials(r.data));
     api.get('/raw-materials/stock', { params: { factoryId: activeFactory } }).then((r) => setStock(r.data));
     api.get('/raw-materials/suppliers').then((r) => setSuppliers(r.data));
-    api.get('/raw-materials/purchases').then((r) => setPurchases(r.data));
+    api.get('/raw-materials/purchases', { params: { factoryId: activeFactory } }).then((r) => setPurchases(r.data));
   };
   useEffect(() => { loadAll(); }, [activeFactory]);
 

@@ -6,6 +6,8 @@ export default function AdminSettings() {
   const [form, setForm] = useState({
     originalPrice: '2999',
     discountedPrice: '999',
+    renewalPrice: '1199',
+    yearlyPrice: '9999',
     paymentDueDay: '25',
     contactName: 'Mandeep',
     contactPhone: '9992662555',
@@ -22,6 +24,8 @@ export default function AdminSettings() {
       setForm({
         originalPrice: r.data.originalPrice?.toString() || '2999',
         discountedPrice: r.data.discountedPrice?.toString() || '999',
+        renewalPrice: r.data.renewalPrice?.toString() || '1199',
+        yearlyPrice: r.data.yearlyPrice?.toString() || '9999',
         paymentDueDay: r.data.paymentDueDay?.toString() || '25',
         contactName: r.data.contactName || 'Mandeep',
         contactPhone: r.data.contactPhone || '9992662555',
@@ -40,6 +44,8 @@ export default function AdminSettings() {
       await api.patch('/settings', {
         originalPrice: +form.originalPrice,
         discountedPrice: +form.discountedPrice,
+        renewalPrice: +form.renewalPrice,
+        yearlyPrice: +form.yearlyPrice,
         paymentDueDay: +form.paymentDueDay,
         contactName: form.contactName,
         contactPhone: form.contactPhone,
@@ -71,8 +77,16 @@ export default function AdminSettings() {
             <input className="form-input" type="number" value={form.originalPrice} onChange={e => setForm({ ...form, originalPrice: e.target.value })} />
           </div>
           <div className="form-group">
-            <label className="form-label">Discounted Price (₹/month)</label>
+            <label className="form-label">Discounted Price (₹/month) — First Year</label>
             <input className="form-input" type="number" value={form.discountedPrice} onChange={e => setForm({ ...form, discountedPrice: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Renewal Price (₹/month) — After 1 Year</label>
+            <input className="form-input" type="number" value={form.renewalPrice} onChange={e => setForm({ ...form, renewalPrice: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Yearly Plan Price (₹/year)</label>
+            <input className="form-input" type="number" value={form.yearlyPrice} onChange={e => setForm({ ...form, yearlyPrice: e.target.value })} />
           </div>
           <div className="form-group">
             <label className="form-label">Payment Due Day</label>
@@ -81,7 +95,13 @@ export default function AdminSettings() {
           <div style={{ marginTop: 12, padding: 12, background: '#f9fafb', borderRadius: 8 }}>
             <span style={{ textDecoration: 'line-through', color: 'var(--muted)' }}>₹{(+form.originalPrice).toLocaleString()}</span>
             <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--success)', marginLeft: 10 }}>₹{(+form.discountedPrice).toLocaleString()}</span>
-            <span style={{ color: 'var(--muted)' }}>/month</span>
+            <span style={{ color: 'var(--muted)' }}>/month (1st year)</span>
+            <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 6, fontWeight: 600 }}>
+              ⚡ After 1 year: ₹{(+form.renewalPrice).toLocaleString()}/month
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--primary)', marginTop: 4, fontWeight: 600 }}>
+              📦 Yearly plan: ₹{(+form.yearlyPrice).toLocaleString()}/year
+            </div>
             <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4 }}>
               {Math.round((1 - +form.discountedPrice / +form.originalPrice) * 100)}% OFF — Pay before {form.paymentDueDay}th
             </div>

@@ -326,6 +326,9 @@ PostgreSQL stores ALL application data in tables:
 - No need to write raw SQL
 
 ---
+and delete all previous data and add 2 customers and add expenditure of all types 3 -3 and many more data so i can
+all the working profeciency and all other with example  
+
 
 ## 🚀 Deployment (Production)
 

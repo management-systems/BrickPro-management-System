@@ -6,9 +6,11 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
   const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
+  const fIds = factoryId ? [factoryId as string] : factories.map(f => f.id);
   const entries = await prisma.fuelEntry.findMany({
-    where: { factoryId: { in: factories.map(f => f.id) } },
+    where: { factoryId: { in: fIds } },
     orderBy: { date: 'desc' },
     take: 100,
   });

@@ -24,6 +24,7 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import AdOverlay from './src/components/AdOverlay';
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
@@ -180,6 +181,7 @@ export default function App() {
   const { user, loading, checkAuth, blocked } = useAuthStore();
   const loadFactories = useAppStore(s => s.loadFactories);
   const theme = useAppStore(s => s.theme);
+  const [adDismissed, setAdDismissed] = useState(false);
 
   useEffect(() => { checkAuth(); }, []);
   useEffect(() => { if (user) loadFactories(); }, [user]);
@@ -198,6 +200,9 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
+          {user && !blocked && !adDismissed && (
+            <AdOverlay onDismiss={() => setAdDismissed(true)} />
+          )}
           <NavigationContainer>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>

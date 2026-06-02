@@ -23,22 +23,27 @@ import Settings from './pages/Settings';
 import Calendar from './pages/Calendar';
 import EditHistory from './pages/EditHistory';
 import Invoice from './pages/Invoice';
+import AdOverlay from './components/AdOverlay';
 
 function ProtectedLayout() {
   const loadFactories = useAppStore((s) => s.loadFactories);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [adDismissed, setAdDismissed] = useState(false);
 
   useEffect(() => { loadFactories(); }, []);
 
   return (
-    <div className="app-layout">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="app-main">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <Outlet />
-        <BottomNav />
+    <>
+      {!adDismissed && <AdOverlay onDismiss={() => setAdDismissed(true)} />}
+      <div className="app-layout">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="app-main">
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+          <Outlet />
+          <BottomNav />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

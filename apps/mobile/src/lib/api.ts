@@ -6,7 +6,7 @@ import Constants from 'expo-constants';
 const PRODUCTION_URL = 'https://api.brickpro.managementsystems.in/api';
 
 // Development URL - your local machine IP
-const DEVELOPMENT_URL = 'http://192.168.1.7:4000/api';
+const DEVELOPMENT_URL = 'http://192.168.1.9:4000/api';
 
 const API_URL = __DEV__ ? DEVELOPMENT_URL : PRODUCTION_URL;
 

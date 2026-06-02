@@ -1,17 +1,37 @@
 import { Router, Request, Response } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import prisma from '../../common/prisma';
 import { config } from '../../config';
 
 const router = Router();
 const tokenOptions: SignOptions = { expiresIn: 86400 };
 
+// Multer setup for ad image uploads
+const uploadsDir = path.join(__dirname, '../../../uploads/ads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+const adUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s/g, '_')}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  },
+});
+
 // In-memory settings (in production, store in DB)
 let appSettings: any = {
   planName: 'Premium',
   originalPrice: 2999,
   discountedPrice: 999,
+  renewalPrice: 1199,
+  yearlyPrice: 9999,
   paymentDueDay: 25,
   contactName: 'Mandeep',
   contactPhone: '9992662555',
@@ -172,6 +192,22 @@ router.patch('/clients/:id/status', superAdminAuth, async (req: Request, res: Re
   res.json(updated);
 });
 
+// PATCH /api/super-admin/clients/:id/plan — Update client subscription plan
+router.patch('/clients/:id/plan', superAdminAuth, async (req: Request, res: Response) => {
+  const { plan, planType, planPrice, planStartDate, planExpiryDate } = req.body;
+  const data: any = {};
+  if (plan) data.plan = plan;
+  if (planType) data.planType = planType;
+  if (planPrice !== undefined) data.planPrice = parseFloat(planPrice);
+  if (planStartDate) data.planStartDate = new Date(planStartDate);
+  if (planExpiryDate) data.planExpiryDate = new Date(planExpiryDate);
+  if (plan === 'premium') data.subscriptionStatus = 'ACTIVE';
+
+  const updated = await prisma.client.update({ where: { id: req.params.id }, data });
+  await logAction((req as any).admin.id, 'UPDATE_PLAN', req, 'client', req.params.id, `${planType} - ₹${planPrice}`);
+  res.json(updated);
+});
+
 // POST /api/super-admin/clients/:id/payments
 router.post('/clients/:id/payments', superAdminAuth, async (req: Request, res: Response) => {
   const { amount, month, year, status, remarks } = req.body;
@@ -260,6 +296,76 @@ router.post('/clients/:id/factories', superAdminAuth, async (req: Request, res: 
   });
   await logAction((req as any).admin.id, 'CREATE_FACTORY', req, 'client', req.params.id, `Factory: ${name}`);
   res.status(201).json(factory);
+});
+
+// PATCH /api/super-admin/clients/:id/factories/:fid — Edit factory name/location
+router.patch('/clients/:id/factories/:fid', superAdminAuth, async (req: Request, res: Response) => {
+  const { name, location, capacityPerDay } = req.body;
+  const data: any = {};
+  if (name !== undefined) data.name = name;
+  if (location !== undefined) data.location = location;
+  if (capacityPerDay !== undefined) data.capacityPerDay = capacityPerDay;
+  const factory = await prisma.factory.update({ where: { id: req.params.fid }, data });
+  await logAction((req as any).admin.id, 'EDIT_FACTORY', req, 'factory', req.params.fid, `${name || factory.name}`);
+  res.json(factory);
+});
+
+// PATCH /api/super-admin/clients/:id/factories/:fid/toggle — Enable/disable factory
+router.patch('/clients/:id/factories/:fid/toggle', superAdminAuth, async (req: Request, res: Response) => {
+  const factory = await prisma.factory.findUnique({ where: { id: req.params.fid } });
+  if (!factory) return res.status(404).json({ error: 'Factory not found' });
+  const updated = await prisma.factory.update({ where: { id: req.params.fid }, data: { active: !factory.active } });
+  await logAction((req as any).admin.id, updated.active ? 'ENABLE_FACTORY' : 'DISABLE_FACTORY', req, 'factory', req.params.fid, factory.name);
+  res.json(updated);
+});
+
+// GET /api/super-admin/factory-requests — All pending factory requests
+router.get('/factory-requests', superAdminAuth, async (_req: Request, res: Response) => {
+  const requests = await prisma.factoryRequest.findMany({
+    orderBy: { createdAt: 'desc' },
+  });
+  // Attach client info
+  const clientIds = [...new Set(requests.map(r => r.clientId))];
+  const clients = await prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, name: true, mobile: true } });
+  const clientMap = Object.fromEntries(clients.map(c => [c.id, c]));
+  res.json(requests.map(r => ({ ...r, client: clientMap[r.clientId] || null })));
+});
+
+// PATCH /api/super-admin/factory-requests/:id/approve — Approve and create factory
+router.patch('/factory-requests/:id/approve', superAdminAuth, async (req: Request, res: Response) => {
+  const request = await prisma.factoryRequest.findUnique({ where: { id: req.params.id } });
+  if (!request) return res.status(404).json({ error: 'Request not found' });
+  if (request.status !== 'pending') return res.status(400).json({ error: 'Request already processed' });
+
+  // Create the factory
+  const factory = await prisma.factory.create({
+    data: { name: request.name, location: request.location, capacityPerDay: request.capacityPerDay, clientId: request.clientId },
+  });
+
+  // Assign OWNER to the factory
+  const owner = await prisma.user.findFirst({ where: { clientId: request.clientId, role: 'OWNER' } });
+  if (owner) {
+    await prisma.userFactory.create({
+      data: { userId: owner.id, factoryId: factory.id, role: 'OWNER', permissions: ['production','dispatch','customers','raw_materials','labour','expenditure','fuel','reports','users'] },
+    });
+  }
+
+  // Update request status
+  await prisma.factoryRequest.update({ where: { id: req.params.id }, data: { status: 'approved', adminRemarks: req.body.remarks || null } });
+
+  await logAction((req as any).admin.id, 'APPROVE_FACTORY_REQUEST', req, 'factoryRequest', req.params.id, `Factory: ${request.name} for client ${request.clientId}`);
+  res.json({ factory, message: 'Factory approved and created' });
+});
+
+// PATCH /api/super-admin/factory-requests/:id/reject — Reject factory request
+router.patch('/factory-requests/:id/reject', superAdminAuth, async (req: Request, res: Response) => {
+  const request = await prisma.factoryRequest.findUnique({ where: { id: req.params.id } });
+  if (!request) return res.status(404).json({ error: 'Request not found' });
+  if (request.status !== 'pending') return res.status(400).json({ error: 'Request already processed' });
+
+  await prisma.factoryRequest.update({ where: { id: req.params.id }, data: { status: 'rejected', adminRemarks: req.body.remarks || 'Rejected' } });
+  await logAction((req as any).admin.id, 'REJECT_FACTORY_REQUEST', req, 'factoryRequest', req.params.id, `Factory: ${request.name}`);
+  res.json({ message: 'Factory request rejected' });
 });
 
 // GET /api/super-admin/clients/:id/reports — Full P&L report for a client
@@ -525,8 +631,8 @@ router.get('/settings', superAdminAuth, async (_req: Request, res: Response) => 
 
 // PATCH /api/super-admin/settings
 router.patch('/settings', superAdminAuth, async (req: Request, res: Response) => {
-  const { originalPrice, discountedPrice, paymentDueDay, contactName, contactPhone, contactEmail, upiId, upiName, bankName, accountNumber, ifscCode } = req.body;
-  Object.assign(appSettings, { originalPrice, discountedPrice, paymentDueDay, contactName, contactPhone, contactEmail, upiId, upiName, bankName, accountNumber, ifscCode });
+  const { originalPrice, discountedPrice, renewalPrice, yearlyPrice, paymentDueDay, contactName, contactPhone, contactEmail, upiId, upiName, bankName, accountNumber, ifscCode } = req.body;
+  Object.assign(appSettings, { originalPrice, discountedPrice, renewalPrice, yearlyPrice, paymentDueDay, contactName, contactPhone, contactEmail, upiId, upiName, bankName, accountNumber, ifscCode });
   await logAction((req as any).admin.id, 'UPDATE_SETTINGS', req, 'settings', undefined, JSON.stringify(req.body));
   res.json(appSettings);
 });
@@ -534,6 +640,55 @@ router.patch('/settings', superAdminAuth, async (req: Request, res: Response) =>
 // GET /api/super-admin/public-settings (no auth - for user app)
 router.get('/public-settings', async (_req: Request, res: Response) => {
   res.json(appSettings);
+});
+
+// ===== ADS MANAGEMENT =====
+
+// GET /api/super-admin/ads — List all ads (admin)
+router.get('/ads', superAdminAuth, async (_req: Request, res: Response) => {
+  const ads = await prisma.ad.findMany({ orderBy: { createdAt: 'desc' } });
+  res.json(ads);
+});
+
+// POST /api/super-admin/ads — Create ad with image upload
+router.post('/ads', superAdminAuth, adUpload.single('image'), async (req: Request, res: Response) => {
+  const { title, linkUrl } = req.body;
+  if (!title || !req.file) return res.status(400).json({ error: 'title and image file required' });
+  const imageUrl = `/uploads/ads/${req.file.filename}`;
+  const ad = await prisma.ad.create({ data: { title, imageUrl, linkUrl: linkUrl || null } });
+  await logAction((req as any).admin.id, 'CREATE_AD', req, 'ad', ad.id, title);
+  res.status(201).json(ad);
+});
+
+// PATCH /api/super-admin/ads/:id — Update ad (optional new image)
+router.patch('/ads/:id', superAdminAuth, adUpload.single('image'), async (req: Request, res: Response) => {
+  const { title, linkUrl, active } = req.body;
+  const data: any = {};
+  if (title !== undefined) data.title = title;
+  if (linkUrl !== undefined) data.linkUrl = linkUrl || null;
+  if (active !== undefined) data.active = active === 'true' || active === true;
+  if (req.file) data.imageUrl = `/uploads/ads/${req.file.filename}`;
+  const ad = await prisma.ad.update({ where: { id: req.params.id }, data });
+  await logAction((req as any).admin.id, 'UPDATE_AD', req, 'ad', ad.id, title || ad.title);
+  res.json(ad);
+});
+
+// DELETE /api/super-admin/ads/:id — Delete ad
+router.delete('/ads/:id', superAdminAuth, async (req: Request, res: Response) => {
+  const ad = await prisma.ad.findUnique({ where: { id: req.params.id } });
+  if (ad?.imageUrl) {
+    const filePath = path.join(__dirname, '../../..', ad.imageUrl);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+  await prisma.ad.delete({ where: { id: req.params.id } });
+  await logAction((req as any).admin.id, 'DELETE_AD', req, 'ad', req.params.id);
+  res.json({ message: 'Deleted' });
+});
+
+// GET /api/super-admin/ads/active — Public: get one active ad for mobile/web app (no auth)
+router.get('/ads/active', async (_req: Request, res: Response) => {
+  const ad = await prisma.ad.findFirst({ where: { active: true }, orderBy: { createdAt: 'desc' } });
+  res.json(ad);
 });
 
 export default router;

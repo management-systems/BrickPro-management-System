@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking, Clipboard, TextInput } from 'react-native';
 import { useAppStore } from '../store/app';
 import { useAuthStore } from '../store/auth';
 import { getColors, spacing } from '../lib/theme';
@@ -10,14 +10,44 @@ export default function SettingsScreen() {
   const { user, logout } = useAuthStore();
   const colors = getColors(theme);
   const [settings, setSettings] = useState<any>(null);
+  const [subscription, setSubscription] = useState<any>(null);
   const [showPayment, setShowPayment] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showFactoryForm, setShowFactoryForm] = useState(false);
+  const [factoryForm, setFactoryForm] = useState({ name: '', location: '' });
+  const [factoryRequests, setFactoryRequests] = useState<any[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.get('/super-admin/public-settings').then(r => setSettings(r.data)).catch(() => {});
+    api.get('/auth/subscription').then(r => setSubscription(r.data)).catch(() => {});
+    loadFactoryRequests();
   }, []);
 
-  const s = settings || { originalPrice: 2999, discountedPrice: 999, paymentDueDay: 25, contactName: 'Mandeep', contactPhone: '9992662555', contactEmail: 'admin@managementsystems.in', upiId: '', upiName: '', bankName: '', accountNumber: '', ifscCode: '' };
+  const loadFactoryRequests = () => {
+    api.get('/factories/requests').then(r => setFactoryRequests(r.data)).catch(() => {});
+  };
+
+  const requestFactory = async () => {
+    if (!factoryForm.name.trim()) return Alert.alert('Error', 'Factory name is required');
+    setSubmitting(true);
+    try {
+      await api.post('/factories', { name: factoryForm.name.trim(), location: factoryForm.location.trim() || undefined });
+      Alert.alert('Success', 'Factory request submitted! Awaiting admin approval.');
+      setFactoryForm({ name: '', location: '' });
+      setShowFactoryForm(false);
+      loadFactoryRequests();
+    } catch { Alert.alert('Error', 'Failed to submit request'); }
+    setSubmitting(false);
+  };
+
+  const s = settings || { originalPrice: 2999, discountedPrice: 999, renewalPrice: 1199, yearlyPrice: 9999, paymentDueDay: 25, contactName: 'Mandeep', contactPhone: '9992662555', contactEmail: 'admin@managementsystems.in', upiId: '', upiName: '', bankName: '', accountNumber: '', ifscCode: '' };
   const discount = Math.round((1 - s.discountedPrice / s.originalPrice) * 100);
+
+  const isPremium = subscription?.plan === 'premium' || subscription?.subscriptionStatus === 'ACTIVE';
+  const isYearly = subscription?.planType === 'yearly';
+  const expiryDate = subscription?.planExpiryDate ? new Date(subscription.planExpiryDate) : null;
+  const startDate = subscription?.planStartDate ? new Date(subscription.planStartDate) : null;
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -50,21 +80,67 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Subscription Card */}
-      <View style={[styles.subCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Subscription Status Card */}
+      <View style={[styles.subCard, { backgroundColor: colors.surface, borderColor: isPremium ? '#10b981' : colors.border, borderWidth: isPremium ? 2 : 1 }]}>
+        {isPremium && (
+          <View style={{ position: 'absolute', top: -10, right: 16, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>✓ PREMIUM</Text>
+          </View>
+        )}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View>
             <Text style={{ fontSize: 13, color: colors.textLight }}>Current Plan</Text>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 2 }}>Premium</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 2 }}>
+              {isPremium ? 'Premium' : subscription?.subscriptionStatus === 'TRIAL' ? 'Free Trial' : 'Inactive'}
+            </Text>
+            {isYearly && <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600', marginTop: 2 }}>📦 Yearly Plan</Text>}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 12, color: colors.textMuted, textDecorationLine: 'line-through' }}>₹{s.originalPrice}</Text>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: colors.success }}>₹{s.discountedPrice}<Text style={{ fontSize: 12, fontWeight: '400', color: colors.textLight }}>/mo</Text></Text>
+            {isPremium && subscription?.planPrice > 0 && (
+              <Text style={{ fontSize: 22, fontWeight: '800', color: colors.success }}>
+                ₹{subscription.planPrice}<Text style={{ fontSize: 12, fontWeight: '400', color: colors.textLight }}>/{isYearly ? 'yr' : 'mo'}</Text>
+              </Text>
+            )}
           </View>
         </View>
+
+        {/* Plan Dates */}
+        {(startDate || expiryDate) && (
+          <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.bg, borderRadius: 10 }}>
+            {startDate && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ fontSize: 12, color: colors.textLight }}>Started</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>{startDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+              </View>
+            )}
+            {expiryDate && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, color: colors.textLight }}>Expires</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: expiryDate < new Date() ? '#ef4444' : '#f59e0b' }}>
+                  {expiryDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Pricing Plans */}
+        <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.bg, borderRadius: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>📅 Monthly</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.primary }}>₹{s.discountedPrice}/mo</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>📦 Yearly (one time)</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.success }}>₹{s.yearlyPrice}</Text>
+          </View>
+        </View>
+
+        {/* Discount Info */}
         <View style={[styles.discountStrip, { backgroundColor: colors.success + '15' }]}>
           <Text style={{ fontSize: 11, color: colors.success, fontWeight: '600' }}>🎉 {discount}% OFF  •  Pay before {s.paymentDueDay}th every month</Text>
         </View>
+
         {(s.upiId || s.bankName) && (
           <TouchableOpacity style={[styles.payNowBtn, { backgroundColor: colors.primary }]} onPress={() => setShowPayment(!showPayment)}>
             <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>{showPayment ? '▲ Hide Payment Details' : '💳 Pay Now'}</Text>
@@ -118,6 +194,30 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      {/* Payment History */}
+      {subscription?.payments?.length > 0 && (
+        <View style={[styles.group, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <TouchableOpacity onPress={() => setShowHistory(!showHistory)} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>📜 Payment History</Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted }}>{showHistory ? '▲' : '▼'} {subscription.payments.length} payments</Text>
+          </TouchableOpacity>
+          {showHistory && subscription.payments.map((p: any) => (
+            <View key={p.id} style={[styles.historyRow, { borderTopColor: colors.border }]}>
+              <View>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{p.month} {p.year}</Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{new Date(p.createdAt).toLocaleDateString('en-IN')}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.success }}>₹{p.amount}</Text>
+                <View style={{ marginTop: 2, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: p.status === 'collected' ? '#dcfce7' : '#fef9c3' }}>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: p.status === 'collected' ? '#166534' : '#854d0e' }}>{p.status === 'collected' ? '✓ Paid' : '⏳ Pending'}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Quick Settings */}
       <View style={[styles.group, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <SettingRow icon="🎨" label="Theme" value={theme === 'light' ? 'Light' : 'Dark'} onPress={toggleTheme} colors={colors} />
@@ -125,14 +225,73 @@ export default function SettingsScreen() {
       </View>
 
       {/* Factory */}
-      {factories.length > 1 && (
+      {factories.length > 0 && (
         <View style={[styles.group, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.groupTitle, { color: colors.textMuted }]}>Factory</Text>
-          {factories.map((f, i) => (
+          {factories.map((f: any, i: number) => (
             <TouchableOpacity key={f.id} style={[styles.settingRow, i === factories.length - 1 && { borderBottomWidth: 0 }, { borderBottomColor: colors.border }]} onPress={() => setActiveFactory(f.id)}>
               <Text style={{ fontSize: 14, color: colors.text }}>{f.name}</Text>
               {activeFactory === f.id && <Text style={{ color: colors.primary, fontSize: 16 }}>●</Text>}
             </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Request New Factory */}
+      {user?.role === 'OWNER' && (
+        <TouchableOpacity
+          style={[styles.group, { backgroundColor: colors.surface, borderColor: colors.primary, padding: 14, alignItems: 'center' }]}
+          onPress={() => setShowFactoryForm(!showFactoryForm)}
+        >
+          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>🏭 + Request New Factory</Text>
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>Requires admin approval</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Factory Request Form */}
+      {showFactoryForm && (
+        <View style={[styles.group, { backgroundColor: colors.surface, borderColor: colors.border, padding: 16 }]}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 10 }}>New Factory Request</Text>
+          <TextInput
+            style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.bg, color: colors.text, fontSize: 14, marginBottom: 10 }}
+            placeholder="Factory Name *"
+            placeholderTextColor={colors.textMuted}
+            value={factoryForm.name}
+            onChangeText={t => setFactoryForm(f => ({ ...f, name: t }))}
+          />
+          <TextInput
+            style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.bg, color: colors.text, fontSize: 14, marginBottom: 12 }}
+            placeholder="Location (optional)"
+            placeholderTextColor={colors.textMuted}
+            value={factoryForm.location}
+            onChangeText={t => setFactoryForm(f => ({ ...f, location: t }))}
+          />
+          <TouchableOpacity
+            style={{ backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 8, alignItems: 'center', opacity: submitting ? 0.6 : 1 }}
+            onPress={requestFactory}
+            disabled={submitting}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>{submitting ? 'Submitting...' : 'Submit Request'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Pending Factory Requests */}
+      {factoryRequests.length > 0 && (
+        <View style={[styles.group, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.groupTitle, { color: colors.textMuted }]}>Factory Requests</Text>
+          {factoryRequests.map((r: any) => (
+            <View key={r.id} style={[styles.settingRow, { borderBottomColor: colors.border }]}>
+              <View>
+                <Text style={{ fontSize: 14, color: colors.text }}>{r.name}</Text>
+                {r.location && <Text style={{ fontSize: 11, color: colors.textMuted }}>{r.location}</Text>}
+              </View>
+              <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: r.status === 'pending' ? '#fef9c3' : r.status === 'approved' ? '#dcfce7' : '#fee2e2' }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: r.status === 'pending' ? '#854d0e' : r.status === 'approved' ? '#166534' : '#991b1b' }}>
+                  {r.status === 'pending' ? '⏳ Pending' : r.status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                </Text>
+              </View>
+            </View>
           ))}
         </View>
       )}
@@ -174,8 +333,9 @@ const styles = StyleSheet.create({
   profileAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   profileName: { fontSize: 18, fontWeight: '700', color: '#fff' },
   roleBadge: { marginTop: 6, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
-  subCard: { marginHorizontal: spacing.md, marginTop: 12, borderRadius: 14, padding: 18, borderWidth: 1 },
-  discountStrip: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  subCard: { marginHorizontal: spacing.md, marginTop: 16, borderRadius: 14, padding: 18, borderWidth: 1 },
+
+  discountStrip: { marginTop: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
   payNowBtn: { marginTop: 14, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   paymentCard: { marginHorizontal: spacing.md, marginTop: 8, borderRadius: 14, padding: 16, borderWidth: 1 },
   upiBox: { padding: 14, borderRadius: 10, borderWidth: 1.5, marginBottom: 10, alignItems: 'center' },
@@ -188,5 +348,6 @@ const styles = StyleSheet.create({
   group: { marginHorizontal: spacing.md, marginTop: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   groupTitle: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },
   logoutBtn: { marginHorizontal: spacing.md, marginTop: 20, paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1.5 },
 });

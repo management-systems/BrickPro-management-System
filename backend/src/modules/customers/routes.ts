@@ -12,6 +12,14 @@ const log = async (req: AuthRequest, action: string, module: string, target?: st
 };
 
 router.get('/', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
+  if (factoryId) {
+    // Only customers who have dispatches in this factory
+    const dispatches = await prisma.dispatch.findMany({ where: { factoryId: factoryId as string }, select: { customerId: true }, distinct: ['customerId'] });
+    const customerIds = dispatches.map(d => d.customerId);
+    const customers = await prisma.customer.findMany({ where: { clientId: req.user!.clientId, id: { in: customerIds } }, orderBy: { name: 'asc' } });
+    return res.json(customers);
+  }
   const customers = await prisma.customer.findMany({ where: { clientId: req.user!.clientId }, orderBy: { name: 'asc' } });
   res.json(customers);
 });
@@ -40,20 +48,20 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
 // GET /api/customers/:id/outstanding
 router.get('/:id/outstanding', async (req: AuthRequest, res: Response) => {
-  const dispatches = await prisma.dispatch.findMany({
-    where: { customerId: req.params.id, balanceDue: { gt: 0 } },
-    orderBy: { date: 'desc' },
-  });
+  const { factoryId } = req.query;
+  const where: any = { customerId: req.params.id, balanceDue: { gt: 0 } };
+  if (factoryId) where.factoryId = factoryId as string;
+  const dispatches = await prisma.dispatch.findMany({ where, orderBy: { date: 'desc' } });
   const total = dispatches.reduce((sum, d) => sum + d.balanceDue, 0);
   res.json({ total, dispatches });
 });
 
 // GET /api/customers/:id/details — all dispatches + summary
 router.get('/:id/details', async (req: AuthRequest, res: Response) => {
-  const dispatches = await prisma.dispatch.findMany({
-    where: { customerId: req.params.id },
-    orderBy: { date: 'desc' },
-  });
+  const { factoryId } = req.query;
+  const where: any = { customerId: req.params.id };
+  if (factoryId) where.factoryId = factoryId as string;
+  const dispatches = await prisma.dispatch.findMany({ where, orderBy: { date: 'desc' } });
   const totalSold = dispatches.reduce((s, d) => s + d.quantity, 0);
   const totalAmount = dispatches.reduce((s, d) => s + d.amount, 0);
   const totalReceived = dispatches.reduce((s, d) => s + d.amountReceived, 0);
@@ -63,14 +71,13 @@ router.get('/:id/details', async (req: AuthRequest, res: Response) => {
 
 // POST /api/customers/:id/payment — record direct payment against oldest dues
 router.post('/:id/payment', async (req: AuthRequest, res: Response) => {
-  const { amount, mode } = req.body;
+  const { amount, mode, factoryId } = req.body;
   if (!amount || amount <= 0) return res.status(400).json({ error: 'amount required' });
 
   const customer = await prisma.customer.findUnique({ where: { id: req.params.id } });
-  const dispatches = await prisma.dispatch.findMany({
-    where: { customerId: req.params.id, balanceDue: { gt: 0 } },
-    orderBy: { date: 'asc' },
-  });
+  const where: any = { customerId: req.params.id, balanceDue: { gt: 0 } };
+  if (factoryId) where.factoryId = factoryId;
+  const dispatches = await prisma.dispatch.findMany({ where, orderBy: { date: 'asc' } });
 
   let remaining = amount;
   for (const d of dispatches) {

@@ -10,26 +10,35 @@ router.use(authenticate);
 // Other roles see only assigned factories
 router.get('/', async (req: AuthRequest, res: Response) => {
   if (req.user!.role === 'OWNER') {
-    const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
+    const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId, active: true } });
     return res.json(factories);
   }
 
   const assignments = await prisma.userFactory.findMany({
-    where: { userId: req.user!.id, active: true },
+    where: { userId: req.user!.id, active: true, factory: { active: true } },
     include: { factory: true },
   });
   res.json(assignments.map((a) => ({ ...a.factory, userRole: a.role, permissions: a.permissions })));
 });
 
-// POST /api/factories — OWNER creates a new factory
+// POST /api/factories — OWNER requests a new factory (needs admin approval)
 router.post('/', authorize('OWNER'), async (req: AuthRequest, res: Response) => {
   const { name, location, capacityPerDay } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
 
-  const factory = await prisma.factory.create({
-    data: { name, location, capacityPerDay, clientId: req.user!.clientId },
+  const request = await prisma.factoryRequest.create({
+    data: { name, location, capacityPerDay, clientId: req.user!.clientId, requestedBy: req.user!.id },
   });
-  res.status(201).json(factory);
+  res.status(201).json({ ...request, message: 'Factory request submitted. Awaiting admin approval.' });
+});
+
+// GET /api/factories/requests — OWNER sees their pending requests
+router.get('/requests', authorize('OWNER'), async (req: AuthRequest, res: Response) => {
+  const requests = await prisma.factoryRequest.findMany({
+    where: { clientId: req.user!.clientId },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json(requests);
 });
 
 // PUT /api/factories/:id

@@ -17,6 +17,24 @@ export default function ClientDetail() {
   const [payForm, setPayForm] = useState({ amount: '', month: '', year: new Date().getFullYear(), remarks: '' });
   const [statusEdit, setStatusEdit] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
+  const [planForm, setPlanForm] = useState({ plan: 'premium', planType: 'monthly', planPrice: '', planStartDate: '', planExpiryDate: '' });
+
+  const toggleFactory = async (factoryId: string, currentActive: boolean) => {
+    try {
+      await api.patch(`/clients/${id}/factories/${factoryId}/toggle`);
+      toast.success(currentActive ? 'Factory disabled' : 'Factory enabled');
+      loadAll();
+    } catch { toast.error('Failed'); }
+  };
+
+  const editFactory = (f: any) => {
+    const name = prompt('Factory Name:', f.name);
+    if (!name) return;
+    const location = prompt('Location:', f.location || '');
+    api.patch(`/clients/${id}/factories/${f.id}`, { name, location: location || null })
+      .then(() => { toast.success('Factory updated'); loadAll(); })
+      .catch(() => toast.error('Failed'));
+  };
 
   useEffect(() => { loadAll(); }, [id]);
 
@@ -29,6 +47,13 @@ export default function ClientDetail() {
       setClient(c.data);
       setUsers(u.data);
       setStatusEdit(c.data.subscriptionStatus);
+      setPlanForm({
+        plan: c.data.plan || 'trial',
+        planType: c.data.planType || 'monthly',
+        planPrice: c.data.planPrice?.toString() || '',
+        planStartDate: c.data.planStartDate ? c.data.planStartDate.split('T')[0] : '',
+        planExpiryDate: c.data.planExpiryDate ? c.data.planExpiryDate.split('T')[0] : '',
+      });
       loadReports();
       loadCustomers();
     } catch { toast.error('Failed to load'); }
@@ -87,6 +112,20 @@ export default function ClientDetail() {
     } catch { toast.error('Failed'); }
   };
 
+  const updatePlan = async () => {
+    try {
+      await api.patch(`/clients/${id}/plan`, {
+        plan: planForm.plan,
+        planType: planForm.planType,
+        planPrice: planForm.planPrice,
+        planStartDate: planForm.planStartDate,
+        planExpiryDate: planForm.planExpiryDate,
+      });
+      toast.success('Plan updated!');
+      loadAll();
+    } catch { toast.error('Failed to update plan'); }
+  };
+
   if (!client) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading...</div>;
 
   const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
@@ -141,9 +180,18 @@ export default function ClientDetail() {
           <div className="detail-card">
             <h4>Factories ({client.factories.length})</h4>
             {client.factories.map((f: any) => (
-              <div key={f.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <strong>{f.name}</strong>
-                {f.location && <span style={{ color: 'var(--muted)', marginLeft: 8 }}>📍 {f.location}</span>}
+              <div key={f.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>{f.name}</strong>
+                  {f.location && <span style={{ color: 'var(--muted)', marginLeft: 8 }}>📍 {f.location}</span>}
+                  <span style={{ marginLeft: 8 }} className={`badge ${f.active ? 'badge-success' : 'badge-danger'}`}>{f.active ? 'Active' : 'Disabled'}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => editFactory(f)}>✏️</button>
+                  <button className={`btn btn-sm ${f.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleFactory(f.id, f.active)}>
+                    {f.active ? '⏸' : '▶'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -155,6 +203,38 @@ export default function ClientDetail() {
             <p><strong>Payments:</strong> {client.payments.length}</p>
             <p><strong>Collected:</strong> {fmt(client.payments.filter((p: any) => p.status === 'collected').reduce((s: number, p: any) => s + p.amount, 0))}</p>
             <p><strong>Pending:</strong> {fmt(client.payments.filter((p: any) => p.status === 'pending').reduce((s: number, p: any) => s + p.amount, 0))}</p>
+          </div>
+
+          <div className="detail-card" style={{ border: '2px solid var(--primary)' }}>
+            <h4>💎 Plan Management</h4>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Set subscription plan for this client</p>
+            <div className="form-group">
+              <label className="form-label">Plan</label>
+              <select className="form-select" value={planForm.plan} onChange={e => setPlanForm({ ...planForm, plan: e.target.value })}>
+                <option value="trial">Trial</option>
+                <option value="premium">Premium</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Plan Type</label>
+              <select className="form-select" value={planForm.planType} onChange={e => setPlanForm({ ...planForm, planType: e.target.value })}>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Price (₹)</label>
+              <input className="form-input" type="number" value={planForm.planPrice} onChange={e => setPlanForm({ ...planForm, planPrice: e.target.value })} placeholder="e.g. 999" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Start Date</label>
+              <input className="form-input" type="date" value={planForm.planStartDate} onChange={e => setPlanForm({ ...planForm, planStartDate: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Expiry Date</label>
+              <input className="form-input" type="date" value={planForm.planExpiryDate} onChange={e => setPlanForm({ ...planForm, planExpiryDate: e.target.value })} />
+            </div>
+            <button className="btn btn-primary" onClick={updatePlan}>💾 Save Plan</button>
           </div>
         </div>
       )}

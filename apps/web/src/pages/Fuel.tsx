@@ -12,7 +12,7 @@ export default function Fuel() {
   const [form, setForm] = useState({ fuelType: 'Diesel', quantity: '', unit: 'litre', rate: '', supplier: '', invoiceNo: '', date: new Date().toISOString().slice(0, 10) });
 
   const load = () => {
-    api.get('/fuel').then((r) => setEntries(r.data));
+    api.get('/fuel', { params: { factoryId: activeFactory } }).then((r) => setEntries(r.data));
     api.get('/expenditure', { params: { factoryId: activeFactory, category: 'Diesel/Fuel' } }).then((r) => setFuelExpenses(r.data)).catch(() => {});
   };
   useEffect(() => { load(); }, [activeFactory]);

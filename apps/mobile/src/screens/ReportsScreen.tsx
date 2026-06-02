@@ -14,11 +14,13 @@ export default function ReportsScreen() {
   const [rawPurchases, setRawPurchases] = useState<any[]>([]);
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [filterYear] = useState(new Date().getFullYear());
+  const [stock, setStock] = useState<Record<string, { produced: number; sold: number; stock: number }>>({});
 
   useEffect(() => {
     api.get('/dispatch', { params: { factoryId: activeFactory } }).then(r => setDispatches(r.data)).catch(() => {});
     api.get('/expenditure', { params: { factoryId: activeFactory } }).then(r => setExpenditures(r.data)).catch(() => {});
-    api.get('/raw-materials/purchases').then(r => setRawPurchases(r.data)).catch(() => {});
+    api.get('/raw-materials/purchases', { params: { factoryId: activeFactory } }).then(r => setRawPurchases(r.data)).catch(() => {});
+    api.get('/reports/stock', { params: { factoryId: activeFactory } }).then(r => setStock(r.data)).catch(() => {});
   }, [activeFactory]);
 
   const monthStart = new Date(filterYear, filterMonth - 1, 1);
@@ -111,6 +113,22 @@ export default function ReportsScreen() {
           ));
         })()}
       </View>
+
+      {/* Brick Stock Card */}
+      {Object.keys(stock).length > 0 && (
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 10 }}>🧱 Brick Stock (In Hand)</Text>
+          {Object.entries(stock).map(([type, val]) => (
+            <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View>
+                <Text style={{ fontSize: 13, fontWeight: '500', color: colors.text }}>{type}</Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted }}>Produced: {val.produced.toLocaleString()} | Sold: {val.sold.toLocaleString()}</Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: val.stock > 0 ? colors.success : colors.danger }}>{val.stock.toLocaleString()}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={{ height: 40 }} />
     </ScrollView>

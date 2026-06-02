@@ -28,7 +28,7 @@ export default function RawMaterialsScreen() {
   useEffect(() => { loadAll(); }, [activeFactory]);
   const loadAll = () => {
     api.get('/raw-materials/stock', { params: { factoryId: activeFactory } }).then(r => setStock(r.data)).catch(() => {});
-    api.get('/raw-materials/purchases').then(r => setPurchases(r.data)).catch(() => {});
+    api.get('/raw-materials/purchases', { params: { factoryId: activeFactory } }).then(r => setPurchases(r.data)).catch(() => {});
     api.get('/raw-materials/materials').then(r => setMaterials(r.data)).catch(() => {});
     api.get('/raw-materials/suppliers').then(r => setSuppliers(r.data)).catch(() => {});
   };

@@ -8,7 +8,7 @@ const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function CalendarScreen() {
-  const { theme } = useAppStore();
+  const { theme, activeFactory } = useAppStore();
   const colors = getColors(theme);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -21,11 +21,11 @@ export default function CalendarScreen() {
   const [rangeData, setRangeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { loadMonth(); }, [currentMonth, currentYear]);
+  useEffect(() => { loadMonth(); }, [currentMonth, currentYear, activeFactory]);
 
   const loadMonth = async () => {
     try {
-      const { data } = await api.get('/reports/calendar', { params: { month: currentMonth + 1, year: currentYear } });
+      const { data } = await api.get('/reports/calendar', { params: { month: currentMonth + 1, year: currentYear, factoryId: activeFactory } });
       setDateMap(data.dates || {});
     } catch {}
   };
@@ -33,7 +33,7 @@ export default function CalendarScreen() {
   const loadDay = async (dateStr: string) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/reports/calendar', { params: { date: dateStr } });
+      const { data } = await api.get('/reports/calendar', { params: { date: dateStr, factoryId: activeFactory } });
       setDayData(data);
     } catch {} finally { setLoading(false); }
   };
@@ -41,7 +41,7 @@ export default function CalendarScreen() {
   const loadRange = async (from: string, to: string) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/reports/calendar', { params: { from, to } });
+      const { data } = await api.get('/reports/calendar', { params: { from, to, factoryId: activeFactory } });
       setRangeData(data);
     } catch {} finally { setLoading(false); }
   };

@@ -25,17 +25,17 @@ export default function Reports() {
   const [selectedYear, setSelectedYear] = useState(0); // 0 = All years
 
   useEffect(() => {
-    api.get('/reports/dashboard').then((r) => setData(r.data)).catch(() => {});
+    api.get('/reports/dashboard', { params: { factoryId: activeFactory } }).then((r) => setData(r.data)).catch(() => {});
     api.get('/dispatch', { params: { factoryId: activeFactory } }).then((r) => setDispatches(r.data)).catch(() => {});
     api.get('/expenditure', { params: { factoryId: activeFactory } }).then((r) => setExpenditures(r.data)).catch(() => {});
     api.get('/production', { params: { factoryId: activeFactory } }).then((r) => setProductions(r.data)).catch(() => {});
-    api.get('/raw-materials/purchases').then((r) => setRawPurchases(r.data)).catch(() => {});
+    api.get('/raw-materials/purchases', { params: { factoryId: activeFactory } }).then((r) => setRawPurchases(r.data)).catch(() => {});
   }, [activeFactory]);
 
   useEffect(() => {
     if (tab === 'charts' && !chartData) {
       setChartLoading(true);
-      api.get('/reports/charts').then((r) => { setChartData(r.data); setChartLoading(false); }).catch(() => setChartLoading(false));
+      api.get('/reports/charts', { params: { factoryId: activeFactory } }).then((r) => { setChartData(r.data); setChartLoading(false); }).catch(() => setChartLoading(false));
     }
   }, [tab]);
 

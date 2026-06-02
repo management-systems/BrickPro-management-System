@@ -51,9 +51,11 @@ router.put('/suppliers/:id', async (req: AuthRequest, res: Response) => {
 
 // === Purchases ===
 router.get('/purchases', async (req: AuthRequest, res: Response) => {
+  const { factoryId } = req.query;
   const factories = await prisma.factory.findMany({ where: { clientId: req.user!.clientId } });
+  const fIds = factoryId ? [factoryId as string] : factories.map(f => f.id);
   const purchases = await prisma.rawMaterialPurchase.findMany({
-    where: { factoryId: { in: factories.map(f => f.id) } },
+    where: { factoryId: { in: fIds } },
     include: { material: { select: { id: true, name: true, unit: true } }, supplier: { select: { id: true, name: true } } },
     orderBy: { date: 'desc' },
     take: 200,

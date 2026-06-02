@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [expenditures, setExpenditures] = useState<any[]>([]);
   const [productions, setProductions] = useState<any[]>([]);
   const [labourCount, setLabourCount] = useState(0);
+  const [stock, setStock] = useState<Record<string, { produced: number; sold: number; stock: number }>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,6 +19,7 @@ export default function Dashboard() {
     api.get('/expenditure', { params: { factoryId: activeFactory } }).then(r => setExpenditures(r.data)).catch(() => {});
     api.get('/production', { params: { factoryId: activeFactory } }).then(r => setProductions(r.data)).catch(() => {});
     api.get('/labour', { params: { factoryId: activeFactory } }).then(r => setLabourCount(r.data?.length || 0)).catch(() => {});
+    api.get('/reports/stock', { params: { factoryId: activeFactory } }).then(r => setStock(r.data)).catch(() => {});
   }, [activeFactory]);
 
   const now = new Date();
@@ -100,6 +102,21 @@ export default function Dashboard() {
           <span style={{ fontWeight: 600 }}>{labourCount}</span>
         </div>
       </div>
+      {/* Brick Stock */}
+      {Object.keys(stock).length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>🧱 Brick Stock (In Hand)</h3>
+          {Object.entries(stock).map(([type, val]) => (
+            <div key={type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{type}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>P:{val.produced.toLocaleString()} | S:{val.sold.toLocaleString()}</span>
+              </div>
+              <span style={{ fontSize: 16, fontWeight: 700, color: val.stock > 0 ? 'var(--success)' : 'var(--danger)' }}>{val.stock.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

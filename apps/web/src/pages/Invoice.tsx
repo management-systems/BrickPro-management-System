@@ -98,6 +98,9 @@ export default function Invoice() {
     items: [],
     subtotal: 0,
     gstAmount: 0,
+    sgstAmount: 0,
+    cgstAmount: 0,
+    igstAmount: 0,
     totalAmount: 0,
     status: 'draft'
   });

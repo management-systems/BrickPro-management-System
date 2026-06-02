@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 export default function Customers() {
   const lang = useAppStore((s) => s.lang);
+  const activeFactory = useAppStore((s) => s.activeFactory);
   const [customers, setCustomers] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<any>(null);
@@ -20,8 +21,8 @@ export default function Customers() {
   const [moreForm, setMoreForm] = useState({ contact2: '', paymentContact: '', address2: '', bankName: '', accountNo: '', ifsc: '', upiId: '' });
   const navigate = useNavigate();
 
-  const loadCustomers = () => api.get('/customers').then((r) => setCustomers(r.data));
-  useEffect(() => { loadCustomers(); }, []);
+  const loadCustomers = () => api.get('/customers', { params: { factoryId: activeFactory } }).then((r) => setCustomers(r.data));
+  useEffect(() => { loadCustomers(); }, [activeFactory]);
 
   const submit = async () => {
     if (!form.name) return toast.error('Name required');
@@ -33,7 +34,7 @@ export default function Customers() {
   };
 
   const openDetail = async (c: any) => {
-    const { data } = await api.get(`/customers/${c.id}/details`);
+    const { data } = await api.get(`/customers/${c.id}/details`, { params: { factoryId: activeFactory } });
     setSelected(c);
     setDetails(data);
   };
@@ -42,7 +43,7 @@ export default function Customers() {
 
   const recordPayment = async () => {
     if (!payAmount || +payAmount <= 0) return toast.error('Enter amount');
-    await api.post(`/customers/${selected.id}/payment`, { amount: +payAmount, mode: payMode });
+    await api.post(`/customers/${selected.id}/payment`, { amount: +payAmount, mode: payMode, factoryId: activeFactory });
     toast.success('Payment recorded!');
 
     const custName = selected.name || 'Customer';

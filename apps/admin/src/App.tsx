@@ -11,6 +11,8 @@ import CreateClient from './pages/CreateClient';
 import AdminSettings from './pages/Settings';
 import Charts from './pages/Charts';
 import Notifications from './pages/Notifications';
+import Ads from './pages/Ads';
+import FactoryRequests from './pages/FactoryRequests';
 
 function useTheme() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -35,6 +37,8 @@ function Sidebar() {
     { to: '/notifications', icon: '🔔', label: 'Notifications' },
     { to: '/payments', icon: '💰', label: 'Payments' },
     { to: '/logs', icon: '📋', label: 'Logs' },
+    { to: '/factory-requests', icon: '🏭', label: 'Factory Requests' },
+    { to: '/ads', icon: '📢', label: 'Ads' },
     { to: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
@@ -121,6 +125,8 @@ export default function App() {
           <Route path="/payments" element={<Payments />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/factory-requests" element={<FactoryRequests />} />
+          <Route path="/ads" element={<Ads />} />
           <Route path="/settings" element={<AdminSettings />} />
         </Route>
       </Routes>

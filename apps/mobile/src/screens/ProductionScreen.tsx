@@ -19,9 +19,11 @@ export default function ProductionScreen() {
   const [editItem, setEditItem] = useState<any>(null);
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [form, setForm] = useState({ brickType: 'Red Brick', shift: 'WHOLE_DAY', count: '' });
+  const [stock, setStock] = useState<Record<string, { produced: number; sold: number; stock: number }>>({});
 
-  useEffect(() => { load(); }, [activeFactory, filterMonth]);
+  useEffect(() => { load(); loadStock(); }, [activeFactory, filterMonth]);
   const load = () => api.get('/production', { params: { factoryId: activeFactory, month: filterMonth, year: new Date().getFullYear() } }).then(r => setEntries(r.data)).catch(() => {});
+  const loadStock = () => api.get('/reports/stock', { params: { factoryId: activeFactory } }).then(r => setStock(r.data)).catch(() => {});
 
   const submit = async () => {
     if (!form.count) { Alert.alert('Enter count'); return; }
@@ -66,6 +68,22 @@ export default function ProductionScreen() {
           </View>
         ))}
       </ScrollView>
+
+      {/* Brick Stock Card */}
+      {Object.keys(stock).length > 0 && (
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 10 }}>🧱 Brick Stock (Production - Sold)</Text>
+          {Object.entries(stock).map(([type, val]) => (
+            <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ fontSize: 13, color: colors.textLight }}>{type}</Text>
+              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 11, color: colors.textMuted }}>P:{val.produced.toLocaleString()} S:{val.sold.toLocaleString()}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: val.stock > 0 ? colors.success : colors.danger }}>{val.stock.toLocaleString()}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Add Button */}
       <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={() => setShowForm(!showForm)}>

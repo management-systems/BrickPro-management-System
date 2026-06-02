@@ -1,0 +1,626 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  BrickPro - Brick Factory Management System
+  Complete infrastructure: VPC, EC2 (Docker), RDS PostgreSQL, ALB, S3, Route53, ACM SSL
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+
+  DomainName:
+    Type: String
+    Default: brickpro.managementsystems.in
+    Description: Primary domain for the web app
+
+  AdminDomain:
+    Type: String
+    Default: admin.brickpro.managementsystems.in
+    Description: Admin panel domain
+
+  ApiDomain:
+    Type: String
+    Default: api.brickpro.managementsystems.in
+    Description: Backend API domain
+
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+    Description: EC2 instance type (t3.small recommended for production)
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 Key Pair for SSH access
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: PostgreSQL master password
+
+  JWTSecret:
+    Type: String
+    NoEcho: true
+    Default: brickpro-prod-secret-2024
+    Description: JWT signing secret
+
+  JWTRefreshSecret:
+    Type: String
+    NoEcho: true
+    Default: brickpro-refresh-secret-2024
+    Description: JWT refresh token secret
+
+  SMTPPass:
+    Type: String
+    NoEcho: true
+    Description: SMTP password for email notifications
+
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: Route53 Hosted Zone ID for your domain
+
+Resources:
+
+  # ============================================================
+  # VPC & NETWORKING
+  # ============================================================
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-public-1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-public-2
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-private-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-private-2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # ============================================================
+  # SECURITY GROUPS
+  # ============================================================
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB - Allow HTTP/HTTPS from internet
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-alb-sg
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EC2 - Allow from ALB + SSH
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 4000
+          ToPort: 4000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ec2-sg
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS - Allow PostgreSQL from EC2 only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-rds-sg
+
+  # ============================================================
+  # RDS POSTGRESQL
+  # ============================================================
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: BrickPro DB Subnet Group
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub ${AWS::StackName}-db
+      Engine: postgres
+      EngineVersion: '15.13'
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      MaxAllocatedStorage: 50
+      StorageType: gp3
+      DBName: brickpro
+      MasterUsername: postgres
+      MasterUserPassword: !Ref DBPassword
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+      DeletionProtection: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-postgres
+
+  # ============================================================
+  # S3 BUCKET (Uploads - Ad images, etc.)
+  # ============================================================
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-uploads-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+
+  UploadsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UploadsBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub ${UploadsBucket.Arn}/uploads/*
+
+  # ============================================================
+  # IAM ROLE FOR EC2
+  # ============================================================
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: S3UploadAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource: !Sub ${UploadsBucket.Arn}/*
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  # ============================================================
+  # EC2 INSTANCE (Docker Host)
+  # ============================================================
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: Database
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Update system
+          dnf update -y
+          dnf install -y docker git
+
+          # Start Docker
+          systemctl enable docker
+          systemctl start docker
+
+          # Install Docker Compose
+          curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+
+          # Create app directory
+          mkdir -p /opt/brickpro
+          cd /opt/brickpro
+
+          # Create docker-compose.yml (without DB - using RDS)
+          cat > docker-compose.yml << 'COMPOSE'
+          services:
+            backend:
+              build: ./backend
+              ports:
+                - "4000:4000"
+              environment:
+                DATABASE_URL: postgresql://postgres:${DBPassword}@${Database.Endpoint.Address}:5432/brickpro
+                JWT_SECRET: ${JWTSecret}
+                JWT_REFRESH_SECRET: ${JWTRefreshSecret}
+                PORT: 4000
+                NODE_ENV: production
+                SMTP_HOST: smtp.gmail.com
+                SMTP_PORT: 465
+                SMTP_SECURE: "true"
+                SMTP_USER: admin@managementsystems.in
+                SMTP_PASS: ${SMTPPass}
+                SMTP_FROM: admin@managementsystems.in
+                AWS_S3_BUCKET: ${UploadsBucket}
+                AWS_REGION: ${AWS::Region}
+              volumes:
+                - uploads:/app/uploads
+              restart: always
+
+            web:
+              build: ./apps/web
+              ports:
+                - "80:80"
+              depends_on:
+                - backend
+              restart: always
+
+            admin:
+              build: ./apps/admin
+              ports:
+                - "3001:80"
+              depends_on:
+                - backend
+              restart: always
+
+          volumes:
+            uploads:
+          COMPOSE
+
+          # Create a deploy script
+          cat > /opt/brickpro/deploy.sh << 'DEPLOY'
+          #!/bin/bash
+          cd /opt/brickpro
+          git pull origin main
+          docker-compose build --no-cache
+          docker-compose up -d
+          docker exec $(docker ps -qf "name=backend") npx prisma migrate deploy
+          echo "Deploy complete!"
+          DEPLOY
+          chmod +x /opt/brickpro/deploy.sh
+
+          # Signal completion
+          echo "BrickPro EC2 setup complete" > /opt/brickpro/setup.log
+
+  # ============================================================
+  # APPLICATION LOAD BALANCER
+  # ============================================================
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${AWS::StackName}-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  # SSL Certificate
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Ref AdminDomain
+        - !Ref ApiDomain
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Ref AdminDomain
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Ref ApiDomain
+          HostedZoneId: !Ref HostedZoneId
+
+  # Target Groups
+  WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-web-tg
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      Targets:
+        - Id: !Ref EC2Instance
+          Port: 80
+
+  ApiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-api-tg
+      Port: 4000
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: instance
+      HealthCheckPath: /api/health
+      HealthCheckIntervalSeconds: 30
+      Targets:
+        - Id: !Ref EC2Instance
+          Port: 4000
+
+  AdminTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-admin-tg
+      Port: 3001
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      Targets:
+        - Id: !Ref EC2Instance
+          Port: 3001
+
+  # HTTPS Listener
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref Certificate
+      DefaultAction:
+        Type: forward
+        TargetGroupArn: !Ref WebTargetGroup
+
+  # HTTP -> HTTPS Redirect
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultAction:
+        Type: redirect
+        RedirectConfig:
+          Protocol: HTTPS
+          Port: '443'
+          StatusCode: HTTP_301
+
+  # Listener Rules - Route by host header
+  ApiListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 1
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref ApiDomain
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ApiTargetGroup
+
+  AdminListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 2
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref AdminDomain
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref AdminTargetGroup
+
+  # ============================================================
+  # ROUTE 53 DNS RECORDS
+  # ============================================================
+  WebDNS:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ALB.DNSName
+        HostedZoneId: !GetAtt ALB.CanonicalHostedZoneID
+
+  ApiDNS:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiDomain
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ALB.DNSName
+        HostedZoneId: !GetAtt ALB.CanonicalHostedZoneID
+
+  AdminDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref AdminDomain
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ALB.DNSName
+        HostedZoneId: !GetAtt ALB.CanonicalHostedZoneID
+
+Outputs:
+  WebURL:
+    Description: Web App URL
+    Value: !Sub https://${DomainName}
+
+  AdminURL:
+    Description: Admin Panel URL
+    Value: !Sub https://${AdminDomain}
+
+  ApiURL:
+    Description: API URL
+    Value: !Sub https://${ApiDomain}
+
+  ALBDNSName:
+    Description: ALB DNS (use if no custom domain)
+    Value: !GetAtt ALB.DNSName
+
+  EC2PublicIP:
+    Description: EC2 Public IP (for SSH)
+    Value: !GetAtt EC2Instance.PublicIp
+
+  RDSEndpoint:
+    Description: PostgreSQL RDS Endpoint
+    Value: !GetAtt Database.Endpoint.Address
+
+  S3Bucket:
+    Description: S3 Uploads Bucket
+    Value: !Ref UploadsBucket
+
+  SSHCommand:
+    Description: SSH into server
+    Value: !Sub ssh -i ${KeyPairName}.pem ec2-user@${EC2Instance.PublicIp}
+
+  DeployCommand:
+    Description: Deploy after pushing code
+    Value: ssh -i <key>.pem ec2-user@<ip> "cd /opt/brickpro && ./deploy.sh"
+
+  MonthlyCostEstimate:
+    Description: Estimated monthly cost
+    Value: "~$25-35/month (t3.small + db.t3.micro + ALB + S3)"

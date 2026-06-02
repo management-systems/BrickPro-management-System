@@ -186,4 +186,28 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   res.json({ ...user, password: undefined, factories });
 });
 
+// GET /api/auth/subscription — User's subscription & payment history
+router.get('/subscription', authenticate, async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id }, include: { client: true } });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const payments = await prisma.payment.findMany({
+    where: { clientId: user.clientId },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
+
+  const client = user.client;
+  res.json({
+    plan: client.plan,
+    planType: (client as any).planType || 'monthly',
+    planPrice: (client as any).planPrice || 0,
+    planStartDate: (client as any).planStartDate,
+    planExpiryDate: (client as any).planExpiryDate,
+    subscriptionStatus: client.subscriptionStatus,
+    trialEndsAt: client.trialEndsAt,
+    payments,
+  });
+});
+
 export default router;

@@ -48,6 +48,10 @@ app.use('/api/expenditure', expenditureRoutes);
 app.use('/api/edit', editRoutes);
 app.use('/api', invoiceRoutes);
 
+// Serve uploaded ad images
+import path from 'path';
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 
 app.listen(config.port, () => {
