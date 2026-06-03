@@ -1,559 +1,429 @@
-# 🧱 BrickPro — Technical Documentation
-
-## 📌 What is BrickPro?
-
-BrickPro is a **multi-platform SaaS application** for managing brick factory (kiln) operations in India. It runs on:
-- **Web** (PWA — works like an app on any browser)
-- **Android** (APK via Play Store)
-- **iOS** (App Store)
-
-All three platforms share **one backend API**.
+# 🧱 BrickPro — Complete Technical Documentation
 
 ---
 
-## 🏗️ Project Structure
-
-```
-BrickPro/
-├── backend/          → API Server (Brain of the app)
-├── apps/
-│   ├── web/          → Web App (PWA) — for browsers
-│   ├── mobile/       → Mobile App — Android + iOS (single codebase)
-│   ├── admin/        → SaaS Admin Panel (your control center)
-│   └── landing/      → Marketing Landing Page
-├── packages/         → Shared code between apps
-├── infra/            → Docker & Terraform (deployment configs)
-└── .github/workflows → CI/CD (auto-deploy on code push)
-```
-
----
-
-## 🔧 Technologies Used
-
-### Backend (API Server)
-
-| Technology | Purpose |
-|-----------|---------|
-| **Node.js** | JavaScript runtime — runs the server |
-| **Express.js** | Web framework — handles HTTP requests (routes, middleware) |
-| **TypeScript** | Type-safe JavaScript — catches bugs before runtime |
-| **Prisma** | ORM — talks to database using simple code instead of raw SQL |
-| **PostgreSQL** | Database — stores all data (users, production, dispatch, etc.) |
-| **JWT (JSON Web Token)** | Authentication — secure login tokens |
-| **Redis** | Cache & Queue — fast data storage for sessions, background jobs |
-| **AWS S3** | File storage — stores uploaded photos/PDFs (challans, invoices) |
-| **Zod** | Validation — ensures incoming data is correct format |
-| **Bull** | Job queue — background tasks (WhatsApp reports, notifications) |
-| **Helmet** | Security — adds HTTP security headers |
-| **express-rate-limit** | Security — prevents API abuse (too many requests) |
-
-### Web App (PWA)
-
-| Technology | Purpose |
-|-----------|---------|
-| **React** | UI library — builds the user interface |
-| **Vite** | Build tool — super fast development server & bundler |
-| **TypeScript** | Type safety |
-| **React Router** | Navigation — handles page routing (Dashboard, Production, etc.) |
-| **Zustand** | State management — stores app state (user, language, factory) |
-| **Axios** | HTTP client — communicates with backend API |
-| **Recharts** | Charts — production graphs, revenue charts |
-| **vite-plugin-pwa** | PWA support — makes web app installable & works offline |
-| **react-hot-toast** | Notifications — shows success/error messages |
-
-### Mobile App (Android + iOS)
-
-| Technology | Purpose |
-|-----------|---------|
-| **React Native** | Cross-platform framework — one code for both Android & iOS |
-| **Expo** | Development toolkit — simplifies React Native development |
-| **React Navigation** | Navigation — bottom tabs, screen transitions |
-| **Expo SecureStore** | Secure storage — stores login tokens safely on device |
-| **Expo Notifications** | Push notifications — alerts for overdue payments, low stock |
-| **EAS Build** | Cloud build service — creates APK (Android) & IPA (iOS) |
-| **Zustand** | State management (same as web) |
-| **Axios** | API communication (same as web) |
-
----
-
-## 🐳 Docker — What & Why?
-
-### What is Docker?
-Docker creates **containers** — lightweight, isolated environments that package your app with all its dependencies. Think of it as a "box" that contains everything needed to run a service.
-
-### Why Docker in BrickPro?
-
-| Container | What it does |
-|-----------|-------------|
-| **postgres** | Runs PostgreSQL database — no need to install PostgreSQL on your machine |
-| **redis** | Runs Redis cache — for sessions and background job queues |
-| **backend** | Runs the API server — same environment as production |
-| **web** | Runs the web app with Nginx — serves the built React app |
-| **admin** | Runs the admin panel — separate from main web app |
-| **landing** | Runs the landing page |
-
-### Docker Benefits:
-- ✅ **One command setup** — `docker-compose up` starts everything
-- ✅ **Same environment** — works the same on your machine, teammate's machine, and production server
-- ✅ **No installation headaches** — don't need to install PostgreSQL, Redis separately
-- ✅ **Easy deployment** — push Docker image to AWS, it runs exactly the same
-- ✅ **Isolation** — each service runs independently, one crashing doesn't affect others
-
-### Docker Commands:
-```bash
-# Start all services
-cd infra
-docker-compose up -d
-
-# Start only database & cache
-docker-compose up -d postgres redis
-
-# Stop everything
-docker-compose down
-
-# View logs
-docker-compose logs backend
-
-# Rebuild after code changes
-docker-compose up -d --build backend
-```
-
----
-
-## 🔌 Ports & Services
-
-| Service | Port | URL | When to use |
-|---------|------|-----|-------------|
-| Backend API | **4000** | http://localhost:4000/api | Always running — all apps talk to this |
-| Web App | **3000** | http://localhost:3000 | Open in browser for web version |
-| Admin Panel | **3001** | http://localhost:3001 | Your SaaS management dashboard |
-| Landing Page | **3002** | http://localhost:3002 | Marketing page for new customers |
-| PostgreSQL | **5432** | localhost:5432 | Database — don't open in browser |
-| Redis | **6379** | localhost:6379 | Cache — don't open in browser |
-| Mobile (Expo) | **8081** | exp://192.168.x.x:8081 | Scan QR code with Expo Go app |
-
----
-
-## 🔄 How It All Works Together
+## 📐 ARCHITECTURE
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        USERS                                 │
-│  (Factory Owner, Manager, Operator on Phone/Computer)        │
-└─────────────┬──────────────────┬──────────────────┬─────────┘
-              │                  │                  │
-              ▼                  ▼                  ▼
-┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-│   Web App       │  │  Android App     │  │   iOS App        │
-│   (React PWA)   │  │  (React Native)  │  │  (React Native)  │
-│   Port: 3000    │  │  Expo Build      │  │  Expo Build      │
-└────────┬────────┘  └────────┬─────────┘  └────────┬─────────┘
-         │                    │                      │
-         └────────────────────┼──────────────────────┘
-                              │
-                    All apps call same API
-                              │
-                              ▼
-              ┌───────────────────────────────┐
-              │        Backend API            │
-              │     (Express + Node.js)       │
-              │        Port: 4000             │
-              │                               │
-              │  /api/auth      → Login/OTP   │
-              │  /api/production → Brick data │
-              │  /api/dispatch  → Challans    │
-              │  /api/customers → Parties     │
-              │  /api/raw-materials → Stock   │
-              │  /api/labour    → Attendance  │
-              │  /api/fuel      → Fuel usage  │
-              │  /api/reports   → Dashboard   │
-              └───────────┬───────────────────┘
-                          │
-              ┌───────────┼───────────────┐
-              │           │               │
-              ▼           ▼               ▼
-┌──────────────┐  ┌─────────────┐  ┌──────────────┐
-│ PostgreSQL   │  │   Redis     │  │   AWS S3     │
-│ (Database)   │  │  (Cache)    │  │  (Files)     │
-│ Port: 5432   │  │ Port: 6379  │  │  (Cloud)     │
-│              │  │             │  │              │
-│ Stores:      │  │ Stores:     │  │ Stores:      │
-│ - Users      │  │ - Sessions  │  │ - Challan    │
-│ - Production │  │ - OTP codes │  │   photos     │
-│ - Dispatch   │  │ - Cache     │  │ - Invoices   │
-│ - Customers  │  │             │  │ - Attendance │
-│ - Labour     │  │             │  │   sheets     │
-│ - Raw Matl.  │  │             │  │              │
-└──────────────┘  └─────────────┘  └──────────────┘
+│     Browser (Web)    │    Android (APK)    │   Admin Panel   │
+└──────────┬───────────┴─────────┬───────────┴────────┬───────┘
+           │                     │                    │
+           ▼                     ▼                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│              NGINX (Reverse Proxy + SSL)                      │
+│  brickpro.managementsystems.in → port 8080                  │
+│  admin.brickpro.managementsystems.in → port 3001            │
+│  api.brickpro.managementsystems.in → port 4000              │
+└──────────┬───────────┬──────────────────────┬───────────────┘
+           │           │                      │
+           ▼           ▼                      ▼
+┌──────────────┐ ┌──────────────┐ ┌────────────────────┐
+│  Web App     │ │  Admin Panel │ │  Backend API       │
+│  (React)     │ │  (React)     │ │  (Node.js/Express) │
+│  Port: 8080  │ │  Port: 3001  │ │  Port: 4000        │
+└──────────────┘ └──────────────┘ └─────────┬──────────┘
+                                             │
+                                             ▼
+                                  ┌────────────────────┐
+                                  │  PostgreSQL (DB)    │
+                                  │  Port: 5432        │
+                                  └────────────────────┘
 ```
 
 ---
 
-## 📱 How Mobile App Works
+## 🛠️ TECHNOLOGIES USED
 
-```
-Developer Machine                    User's Phone
-┌─────────────────┐                 ┌─────────────────┐
-│  Write Code     │                 │  Expo Go App    │
-│  (React Native) │   ──build──►   │  (Development)  │
-│                 │                 │                 │
-│  expo start     │                 │  OR             │
-│                 │                 │                 │
-│  EAS Build      │   ──build──►   │  APK/IPA        │
-│  (Cloud)        │                 │  (Production)   │
-└─────────────────┘                 └─────────────────┘
-```
+### Frontend — Web App (`apps/web/`)
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| React | 18.2 | UI library |
+| TypeScript | 5.3 | Type safety |
+| Vite | 5.1 | Build tool (fast dev server + bundler) |
+| React Router | 6.22 | Page navigation |
+| Zustand | 4.5 | State management (stores) |
+| Recharts | 2.12 | Charts & graphs |
+| Axios | 1.6 | API calls (HTTP client) |
+| React Hot Toast | 2.4 | Notification toasts |
+| date-fns | 3.3 | Date formatting |
+| vite-plugin-pwa | 0.19 | Progressive Web App (offline support) |
 
-- **Development**: Run `expo start`, scan QR with Expo Go app on phone
-- **Production Android**: `eas build --platform android` → generates APK → upload to Play Store
-- **Production iOS**: `eas build --platform ios` → generates IPA → upload to App Store
+### Frontend — Admin Panel (`apps/admin/`)
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| React | 18.2 | UI library |
+| TypeScript | 5.3 | Type safety |
+| Vite | 5.1 | Build tool |
+| React Router | 6.22 | Navigation |
+| Recharts | 2.12 | Charts (Power BI style) |
+| Axios | 1.6 | API calls |
+| React Hot Toast | 2.4 | Toasts |
+| date-fns | 3.3 | Dates |
+
+### Frontend — Mobile App (`apps/mobile/`)
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| React Native | 0.76.7 | Native mobile UI |
+| Expo | 52 | React Native framework (easy build) |
+| React Navigation | 6.x | Screen navigation (drawer + stack) |
+| Zustand | 4.3 | State management |
+| Axios | 1.6 | API calls |
+| expo-notifications | 0.29 | Push notifications |
+| expo-secure-store | 14.0 | Secure token storage |
+| react-native-reanimated | 3.16 | Animations (swipe) |
+
+### Backend (`backend/`)
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Node.js | 18 | JavaScript runtime |
+| Express | 4.18 | HTTP server framework |
+| TypeScript | 5.3 | Type safety |
+| Prisma | 5.10 | Database ORM (SQL queries) |
+| PostgreSQL | 15 | Database |
+| JWT (jsonwebtoken) | 9.0 | Authentication tokens |
+| bcryptjs | 2.4 | Password hashing |
+| Nodemailer | - | Email (OTP via SMTP) |
+| express-rate-limit | 7.1 | API rate limiting |
+| helmet | 7.1 | Security headers |
+| cors | 2.8 | Cross-origin requests |
+| multer | 1.4 | File uploads |
+| zod | 3.22 | Input validation |
+
+### Database
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| PostgreSQL | 15 (Alpine) | Relational database |
+| Prisma ORM | 5.10 | Schema management + queries |
+
+### DevOps / Deployment
+| Technology | Purpose |
+|-----------|---------|
+| Docker | Containerization (packages app) |
+| Docker Compose | Multi-container orchestration |
+| Nginx | Reverse proxy + SSL termination |
+| Let's Encrypt (Certbot) | Free SSL certificates |
+| AWS EC2 | Cloud server |
+| Git + GitHub | Version control |
+| EAS (Expo) | Mobile app builds (APK/AAB) |
+
+### Email / Communication
+| Technology | Purpose |
+|-----------|---------|
+| Google Workspace SMTP | Send OTP emails |
+| Nodemailer | SMTP client library |
+| WhatsApp (wa.me links) | Share challans/receipts |
 
 ---
 
-## 🔐 Authentication & Login Credentials
+## 📁 PROJECT STRUCTURE
 
-### Super Admin (SaaS Control Panel)
+```
+BrickPro/
+├── backend/                    # Node.js API Server
+│   ├── prisma/
+│   │   └── schema.prisma      # Database schema (all tables)
+│   ├── src/
+│   │   ├── config/index.ts    # Environment config
+│   │   ├── common/
+│   │   │   ├── prisma.ts      # Database connection
+│   │   │   ├── middleware.ts  # Auth middleware
+│   │   │   └── email/index.ts # Email (OTP sender)
+│   │   └── modules/
+│   │       ├── auth/          # Login, OTP, Signup
+│   │       ├── production/    # Brick production
+│   │       ├── dispatch/      # Sales/Dispatch
+│   │       ├── customers/     # Customer management
+│   │       ├── raw-materials/ # Raw material tracking
+│   │       ├── labour/        # Labour & payments
+│   │       ├── expenditure/   # Expenses
+│   │       ├── fuel/          # Fuel entries
+│   │       ├── invoice/       # GST Invoice
+│   │       ├── reports/       # Reports + Charts + Notifications
+│   │       ├── users/         # User management
+│   │       ├── factories/     # Factory CRUD
+│   │       ├── edit/          # Edit logs
+│   │       └── super-admin/   # Admin panel APIs
+│   ├── Dockerfile             # Docker build instructions
+│   ├── .env                   # Environment variables (SECRETS)
+│   └── package.json           # Dependencies
+│
+├── apps/
+│   ├── web/                   # React Web Application
+│   │   ├── src/
+│   │   │   ├── components/    # Header, Sidebar, BottomNav
+│   │   │   ├── pages/        # All page components
+│   │   │   ├── store/        # Zustand stores
+│   │   │   ├── lib/          # API client, i18n
+│   │   │   └── index.css     # All styles
+│   │   ├── Dockerfile         # Docker build
+│   │   └── nginx.conf         # Nginx config for SPA
+│   │
+│   ├── admin/                 # Super Admin Panel
+│   │   ├── src/
+│   │   │   ├── pages/        # Dashboard, Clients, Charts, etc.
+│   │   │   └── lib/api.ts    # Admin API client
+│   │   ├── Dockerfile
+│   │   └── nginx.conf
+│   │
+│   └── mobile/                # React Native App
+│       ├── src/
+│       │   ├── screens/       # All screens
+│       │   ├── store/         # Auth & App stores
+│       │   └── lib/           # API, theme, i18n
+│       ├── App.tsx            # Entry point
+│       ├── app.json           # Expo config
+│       ├── eas.json           # Build profiles
+│       └── store-assets/      # Play Store assets
+│
+├── docker-compose.yml         # 4 containers definition
+├── deploy.sh                  # EC2 deployment script
+├── nginx.conf                 # Single-container nginx
+├── .env                       # SMTP password
+├── .gitignore                 # Files to ignore in git
+├── CHANGES_TRACKER.md         # Changelog
+└── README.md                  # Documentation
+```
 
+---
+
+## 🔐 ALL PASSWORDS & CREDENTIALS
+
+### Backend .env (on EC2: ~/brickpro/.env)
+```
+DATABASE_URL=postgresql://postgres:Rewari@123@db:5432/brickpro
+JWT_SECRET=brickpro-dev-secret-2024
+JWT_REFRESH_SECRET=brickpro-refresh-secret-2024
+PORT=4000
+NODE_ENV=production
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=admin@managementsystems.in
+SMTP_PASS=qzsllfyadvnpxpni
+SMTP_FROM=admin@managementsystems.in
+```
+
+### Database
 | Field | Value |
 |-------|-------|
-| URL | http://localhost:3001 |
-| Email | `admin@brickpro.in` |
-| Password | `BrickPro@2024` |
-| Access | Full platform control — all clients, factories, payments, logs |
+| Host | `db` (Docker internal) or `localhost` |
+| Port | 5432 |
+| Database | brickpro |
+| Username | postgres |
+| Password | Rewari@123 |
 
-> **First-time setup**: Run `POST http://localhost:4000/api/super-admin/seed` to create the super admin account.
+### Super Admin Login
+| Field | Value |
+|-------|-------|
+| Email | admin@managementsystems.in |
+| Password | Admin@2024 |
+| OTP | Sent to admin@managementsystems.in |
 
-### Factory Users (Web App + Mobile App)
+### Google Workspace SMTP (for OTP emails)
+| Field | Value |
+|-------|-------|
+| Email | admin@managementsystems.in |
+| App Password | qzsl lfya dvnp xpni |
+| SMTP Host | smtp.gmail.com |
+| SMTP Port | 465 |
 
-| Field | Details |
-|-------|--------|
-| URL (Web) | http://localhost:3000 |
-| Login Method | OTP-based (no password) |
-| Roles | OWNER, MANAGER, SUPERVISOR, OPERATOR, ACCOUNTANT |
+### GitHub
+| Field | Value |
+|-------|-------|
+| Repo | https://github.com/management-systems/BrickPro-management-System |
+| Username | Mandy2555 / management-systems |
 
-**New User Signup (Trial):**
-```
-POST http://localhost:4000/api/auth/trial-signup
-{
-  "name": "Factory Owner Name",
-  "mobile": "9876543210",
-  "factoryName": "My Brick Factory"
-}
-→ Returns JWT token immediately (7-day free trial starts)
-```
+### AWS EC2
+| Field | Value |
+|-------|-------|
+| IP | 3.27.214.168 |
+| Username | ec2-user |
+| Key | .pem file (keep safe) |
+| Region | ap-southeast-2 (Sydney) or ap-south-1 (Mumbai) |
 
-**Existing User Login:**
-```
-1. POST /api/auth/send-otp → { "mobile": "9876543210" }
-   → OTP printed in server console (dev mode)
-
-2. POST /api/auth/verify-otp → { "mobile": "9876543210", "otp": "123456" }
-   → Returns JWT token (24hr) + refresh token (30 days)
-```
-
-### Authentication Flow
-
-```
-User opens app
-      │
-      ▼
-┌─ Enter Mobile Number ─┐
-│                        │
-│  POST /api/auth/send-otp
-│  → Server generates 6-digit OTP
-│  → Sends via SMS/WhatsApp
-│  → In dev: OTP printed in server console
-│                        │
-└────────────────────────┘
-      │
-      ▼
-┌─ Enter OTP ───────────┐
-│                        │
-│  POST /api/auth/verify-otp
-│  → Server verifies OTP
-│  → Returns JWT token (valid 24hr)
-│  → Returns refresh token (valid 30 days)
-│                        │
-└────────────────────────┘
-      │
-      ▼
-┌─ App stores token ────┐
-│  Web: localStorage     │
-│  Mobile: SecureStore   │
-│                        │
-│  Every API call sends: │
-│  Authorization: Bearer <token>
-└────────────────────────┘
-```
-
-### User Roles & Permissions
-
-| Role | Access Level |
-|------|-------------|
-| **OWNER** | Full access — all modules, settings, user management |
-| **MANAGER** | All operations — production, dispatch, labour, reports |
-| **SUPERVISOR** | Production, dispatch, attendance entry |
-| **OPERATOR** | Production entry only |
-| **ACCOUNTANT** | Dispatch, payments, reports |
+### Domain
+| Field | Value |
+|-------|-------|
+| Main | managementsystems.in |
+| Web App | brickpro.managementsystems.in |
+| Admin | admin.brickpro.managementsystems.in |
+| API | api.brickpro.managementsystems.in |
 
 ---
 
-## 🗄️ Database (PostgreSQL)
+## 🚀 DEPLOYMENT STEPS (Complete)
 
-PostgreSQL stores ALL application data in tables:
+### Step 1: Code Development (DONE ✅)
+- Write code on local machine
+- Test locally with `npm run dev`
 
-| Table | What it stores |
-|-------|---------------|
-| `clients` | Factory owners (your customers) |
-| `users` | People who use the app (owner, manager, operator) |
-| `factories` | Each brick factory/kiln |
-| `production_entries` | Daily brick production data |
-| `dispatches` | Truck dispatch & challan records |
-| `customers` | Dealers/buyers of bricks |
-| `fuel_entries` | Coal/wood/gas purchases |
-| `labour` | Worker profiles |
-| `attendance` | Daily attendance records |
-| `labour_payments` | Salary/wage payments |
-| `raw_materials` | Material master list (clay, sand, etc.) |
-| `suppliers` | Raw material suppliers |
-| `raw_material_purchases` | Purchase records |
-| `raw_material_consumption` | Daily material usage |
-| `raw_material_price_history` | Rate change tracking |
-
-**Prisma** manages the database:
-- `prisma migrate` → creates/updates tables
-- `prisma generate` → creates TypeScript code to query database
-- No need to write raw SQL
-
----
-and delete all previous data and add 2 customers and add expenditure of all types 3 -3 and many more data so i can
-all the working profeciency and all other with example  
-
-
-## 🚀 Deployment (Production)
-
-### Where each service runs:
-
-| Service | Deployed On | URL |
-|---------|------------|-----|
-| Landing Page | AWS S3 + CloudFront (CDN) | brickpro.in |
-| Web App | AWS ECS (Docker container) | app.brickpro.in |
-| Admin Panel | AWS ECS | admin.brickpro.in |
-| Backend API | AWS ECS | api.brickpro.in |
-| Database | AWS RDS (managed PostgreSQL) | internal |
-| Cache | AWS ElastiCache (managed Redis) | internal |
-| Files | AWS S3 | internal |
-| Android | Google Play Store | — |
-| iOS | Apple App Store | — |
-
-### CI/CD (Auto-Deploy):
-```
-Developer pushes code to GitHub
-         │
-         ▼
-GitHub Actions detects which folder changed
-         │
-         ├── backend/ changed → Build & deploy API
-         ├── apps/web/ changed → Build & deploy Web
-         ├── apps/mobile/ changed → Build APK/IPA
-         └── apps/admin/ changed → Build & deploy Admin
+### Step 2: Push to GitHub (DONE ✅)
+```bash
+git add .
+git commit -m "message"
+git push origin main
 ```
 
-Each app deploys **independently** — updating the web app doesn't restart the backend.
+### Step 3: EC2 Setup (DONE ✅)
+1. Launch EC2 instance on AWS
+2. SSH into EC2
+3. Install Docker + Docker Compose + Buildx
 
----
-
-## 🏃 How to Run Locally
-
-### Quick Start (with Docker):
-```powershell
-cd infra
-docker-compose up -d
-# Everything starts automatically
+### Step 4: Deploy on EC2 (IN PROGRESS 🔄)
+```bash
+cd ~/brickpro
+git pull
+sudo docker compose up --build -d
 ```
 
-### Manual Start (without Docker):
+### Step 5: Database Setup
+```bash
+sudo docker compose exec -T backend npx prisma db push
+curl -X POST http://localhost:4000/api/super-admin/seed
+```
 
-**Prerequisites:**
-- Node.js **>= 20.19.4** (required for Expo SDK 54 + React Native 0.81)
-- PostgreSQL running on port 5432
-- Redis running on port 6379 (optional for dev)
+### Step 6: Point DNS
+Add A records in domain provider:
+- brickpro → 3.27.214.168
+- admin.brickpro → 3.27.214.168
+- api.brickpro → 3.27.214.168
 
-```powershell
-# Terminal 1 — Backend API
-cd backend
-npm install
-npx prisma generate
-npx prisma migrate dev
-npm run dev
-# → Running on http://localhost:4000
+### Step 7: Setup Nginx + SSL (on EC2)
+```bash
+sudo yum install -y nginx
+# Create config (proxy to Docker ports)
+sudo systemctl start nginx
+sudo certbot --nginx -d brickpro.managementsystems.in ...
+```
 
-# Terminal 2 — Web App (Frontend)
-cd apps/web
-npm install
-npm run dev
-# → Running on http://localhost:3000
-
-# Terminal 3 — Mobile App (Expo)
+### Step 8: Mobile App Build
+```bash
 cd apps/mobile
-npm install --legacy-peer-deps
-npx expo start --clear
-# → Scan QR code with Expo Go app on phone
-# → Phone & computer must be on same WiFi network
-
-# Terminal 4 — Admin Panel (Super Admin)
-cd apps/admin
-npm install
-npm run dev
-# → Running on http://localhost:3001
+eas build --platform android --profile preview   # APK
+eas build --platform android --profile production # AAB (Play Store)
 ```
 
-### Troubleshooting:
-
-| Issue | Fix |
-|-------|-----|
-| `EADDRINUSE: port 4000` | Kill existing process: `taskkill /F /IM node.exe` then restart |
-| `PlatformConstants` TurboModule error | Update Node.js to >= 20.19.4 (download from nodejs.org) |
-| `Unable to resolve module` error | Run `npm install --legacy-peer-deps` in apps/mobile |
-| Expo Go can't connect to API | Ensure phone & PC on same WiFi, check IP in `apps/mobile/src/lib/api.ts` |
-| TypeScript compilation error in auth | Ensure `jsonwebtoken` types match — check `backend/src/modules/auth/routes.ts` |
+### Step 9: Razorpay Integration (Later)
+- Create account + plans
+- Integrate payment SDK
 
 ---
 
-## 📦 Key Libraries Explained
+## 🔄 HOW TO UPDATE (after code changes)
 
-| Library | Simple Explanation |
-|---------|-------------------|
-| **Express** | Like a receptionist — receives requests, routes them to correct handler |
-| **Prisma** | Translator between your code and database — you write JS, it writes SQL |
-| **JWT** | Digital ID card — proves who you are without asking password every time |
-| **React** | Builds UI from reusable components (like LEGO blocks for screens) |
-| **Zustand** | Memory for the app — remembers who's logged in, which factory is selected |
-| **Axios** | Messenger — sends requests from app to backend and brings back data |
-| **Vite** | Super-fast development server — shows changes instantly in browser |
-| **Expo** | Toolkit that makes React Native easier — handles builds, notifications, etc. |
-| **Docker** | Shipping container for code — packages app + dependencies together |
-| **Nginx** | Web server — serves the built web app files to browsers |
-| **Redis** | Super-fast notepad — stores temporary data (OTPs, sessions) |
-| **Turborepo** | Monorepo tool — manages multiple apps in one repository efficiently |
+### On local machine:
+```bash
+# Make code changes
+git add .
+git commit -m "fix: description"
+git push origin main
+```
 
----
+### On EC2:
+```bash
+cd ~/brickpro
+git pull
+sudo docker compose up --build -d
+```
 
-## 🌐 Bilingual (English + Hindi)
-
-The app supports both languages:
-- All labels, buttons, messages available in both
-- User toggles language with one tap
-- Language preference saved (persists across sessions)
-- Implementation: Simple key-value translation file (`i18n.ts`)
-
-```typescript
-// Example
-tr('production', 'en') → "Production"
-tr('production', 'hi') → "उत्पादन"
+### Mobile app update (no re-download):
+```bash
+cd apps/mobile
+eas update --branch production --message "Bug fixes"
 ```
 
 ---
 
-## 📊 Modules Summary
+## 📊 DATABASE TABLES (schema.prisma)
 
-| Module | What it does |
-|--------|-------------|
-| **Auth** | OTP login, trial signup, token management |
-| **Super Admin** | Platform management — clients, subscriptions, payments, logs |
-| **Production** | Daily brick production entry (raw, fired, scrap counts) |
-| **Dispatch** | Truck dispatch, challan generation, delivery tracking |
-| **Customers** | Dealer/buyer management, outstanding tracking |
-| **Fuel** | Coal/wood purchase tracking, cost analytics |
-| **Labour** | Worker profiles, attendance (one-tap), salary/payments |
-| **Raw Materials** | Material master list, purchase entry, stock tracking, price history |
-| **Reports** | Dashboard stats, WhatsApp reports |
-| **Factories** | Multi-factory management |
+| Table | Purpose |
+|-------|---------|
+| SuperAdmin | Admin login |
+| AdminLog | Admin action logs |
+| Client | Brick factory owners (tenants) |
+| User | Users of each client |
+| Factory | Factories per client |
+| UserFactory | User-factory permissions |
+| BrickType | Brick types per client |
+| ProductionEntry | Daily brick production |
+| Customer | Customers of each client |
+| Dispatch | Sales/dispatch records |
+| FuelEntry | Fuel consumption |
+| Labour | Labour workers |
+| Attendance | Labour attendance |
+| LabourPayment | Labour payments |
+| LabourProduction | Labour production records |
+| RawMaterial | Raw material types |
+| Supplier | Material suppliers |
+| RawMaterialPurchase | Purchases |
+| RawMaterialConsumption | Usage tracking |
+| Expenditure | Expenses |
+| Invoice | GST Invoices |
+| InvoiceItem | Invoice line items |
+| InvoiceSettings | Company invoice config |
+| CustomerInvoiceSettings | Per-customer settings |
+| EditLog | Edit audit trail |
+| Payment | Subscription payments |
+| ActivityLog | User activity logs |
+| Notification | Push notifications |
 
 ---
 
-## 🛡️ Super Admin Panel
+## 🌐 API ENDPOINTS (Main ones)
 
-### URL: http://localhost:3001
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | /api/auth/login | Email/password login |
+| POST | /api/auth/send-otp | Send OTP to email |
+| POST | /api/auth/verify-otp | Verify OTP + login |
+| POST | /api/auth/trial-signup | New user signup |
+| GET | /api/auth/me | Get current user |
+| GET | /api/production | List production entries |
+| POST | /api/production | Add production |
+| GET | /api/dispatch | List dispatches |
+| POST | /api/dispatch | Add dispatch |
+| GET | /api/customers | List customers |
+| GET | /api/reports/dashboard | Dashboard stats |
+| GET | /api/reports/charts | Chart data |
+| GET | /api/reports/notifications | User notifications |
+| GET | /api/invoices | List invoices |
+| POST | /api/invoices | Create invoice |
+| GET | /api/super-admin/dashboard | Admin stats |
+| GET | /api/super-admin/clients | All clients |
+| GET | /api/super-admin/charts | Analytics |
+| POST | /api/super-admin/notifications | Send notification |
+| GET | /api/super-admin/public-settings | App settings (no auth) |
 
-### Features:
-| Feature | Description |
+---
+
+## 💰 COSTS
+
+| Service | Monthly Cost |
 |---------|-------------|
-| **Dashboard** | Total clients, paid/trial/expired counts, total factories & users |
-| **Client Management** | View all clients, their factories, users |
-| **Service Toggle** | Enable/Disable any client's access (ON/OFF switch) |
-| **Subscription Status** | Change status: TRIAL → ACTIVE → EXPIRED → SUSPENDED |
-| **Payment Tracking** | Add monthly payments, mark as collected/pending |
-| **Logs** | Full audit trail — every admin action + all user activity |
-
-### Super Admin API Endpoints:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/super-admin/seed` | Create default super admin (run once) |
-| POST | `/api/super-admin/login` | Login with email/password |
-| GET | `/api/super-admin/dashboard` | Overview stats |
-| GET | `/api/super-admin/clients` | All clients with factories, users, payments |
-| GET | `/api/super-admin/clients/:id` | Single client details |
-| PATCH | `/api/super-admin/clients/:id/toggle` | Enable/disable service |
-| PATCH | `/api/super-admin/clients/:id/status` | Change subscription status |
-| POST | `/api/super-admin/clients/:id/payments` | Add monthly payment record |
-| PATCH | `/api/super-admin/payments/:id` | Mark payment collected/pending |
-| GET | `/api/super-admin/payments` | All payments (filter by month/year/status) |
-| GET | `/api/super-admin/logs` | Admin action audit logs |
-| GET | `/api/super-admin/activity` | User activity logs across platform |
+| EC2 t3.small | ~₹1,200 |
+| EC2 t2.micro (free tier) | ₹0 (12 months) |
+| Domain (managementsystems.in) | ~₹800/year |
+| Google Workspace (email) | ~₹130/month |
+| SSL (Let's Encrypt) | ₹0 |
+| GitHub | ₹0 |
+| Docker | ₹0 |
+| **Total (with free tier)** | **~₹130/month** |
+| **Total (after free tier)** | **~₹1,330/month** |
 
 ---
 
-## 📋 Logging System
+## 🎯 REVENUE MODEL
 
-### Admin Logs (AdminLog table)
-Tracks every action the super admin performs:
+| Plan | Price | Billing |
+|------|-------|---------|
+| Free Trial | ₹0 | 7 days |
+| Monthly | ₹999/month | Manual UPI / Razorpay |
+| Yearly | ₹9,999/year | Manual UPI / Razorpay |
 
-| Logged Action | When |
-|---------------|------|
-| LOGIN | Admin logs into panel |
-| ENABLE_SERVICE | Turns on a client's access |
-| DISABLE_SERVICE | Turns off a client's access |
-| CHANGE_STATUS | Changes subscription status |
-| ADD_PAYMENT | Adds monthly payment record |
-| UPDATE_PAYMENT | Marks payment as collected/pending |
-
-Each log stores: admin name, action, target client, details, IP address, timestamp.
-
-### Activity Logs (ActivityLog table)
-Tracks all user actions across the platform:
-
-| Field | Description |
-|-------|-------------|
-| clientId | Which client/factory owner |
-| userId | Which user performed action |
-| action | What they did (CREATE, UPDATE, DELETE) |
-| module | Which module (production, dispatch, etc.) |
-| target | What was affected |
-| details | Additional info |
-| ip | User's IP address |
-| createdAt | When it happened |
+**Break-even:** 2 clients × ₹999 = ₹1,998/month (covers all costs)
 
 ---
 
-## 💰 Payment & Subscription Model
-
-| Status | Meaning |
-|--------|--------|
-| **TRIAL** | 7-day free trial (starts on signup) |
-| **ACTIVE** | Paid & active subscription |
-| **EXPIRED** | Trial/subscription ended, not renewed |
-| **SUSPENDED** | Manually disabled by super admin |
-
-### Payment Flow:
-1. Client signs up → 7-day free trial starts
-2. Trial ends → Status changes to EXPIRED
-3. Super admin adds monthly payment (amount, month, year) → Status: "pending"
-4. Payment collected manually (cash/UPI) → Super admin marks as "collected"
-5. Super admin changes client status to ACTIVE
-6. If client doesn't pay → Super admin can DISABLE service
-
----
-
-*Document version: 2.0 | Last updated: May 2025*
+*Last Updated: June 2, 2026*

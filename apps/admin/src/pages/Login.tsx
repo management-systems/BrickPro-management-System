@@ -4,7 +4,7 @@ import api from '../lib/api';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const authApi = axios.create({ baseURL: 'http://localhost:4000/api/auth' });
+const authApi = axios.create({ baseURL: '/api/auth' });
 
 export default function Login() {
   const [tab, setTab] = useState<'admin' | 'user'>('admin');

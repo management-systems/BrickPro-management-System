@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: 'http://localhost:4000/api/super-admin' });
+const api = axios.create({ baseURL: '/api/super-admin' });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('admin_token');
